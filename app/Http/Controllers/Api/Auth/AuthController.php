@@ -52,6 +52,15 @@ class AuthController extends Controller
                 ],
             ]);
         } catch (\Exception $e) {
+            // Check if it's an email verification error
+            if (str_contains($e->getMessage(), 'Email not verified')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $e->getMessage(),
+                    'requires_verification' => true,
+                ], 403);
+            }
+            
             return response()->json([
                 'success' => false,
                 'message' => "Invalid credentials",
@@ -72,6 +81,7 @@ class AuthController extends Controller
             'data' => [
                 'token' => $result['token'],
                 'user' => new UserResource($result['user']),
+                'company' => $result['company'],
             ],
         ], 201);
     }

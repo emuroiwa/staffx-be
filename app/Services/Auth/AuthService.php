@@ -4,24 +4,30 @@ namespace App\Services\Auth;
 
 use App\Models\User;
 use App\Repositories\Auth\AuthRepository;
+use App\Services\CompanyService;
 use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Auth\Events\Registered;
 use Tymon\JWTAuth\Facades\JWTAuth;
 
 class AuthService
 {
     public function __construct(
-        protected AuthRepository $authRepository
+        protected AuthRepository $authRepository,
+        protected CompanyService $companyService
     ) {}
 
     /**
-     * Register a new user.
+     * Register a new user and create their first company.
      *
      * @param array $userData
      * @return array
      */
     public function register(array $userData): array
     {
+        // Extract company name before user processing
+        $companyName = $userData['company'];
+        
         // Combine first and last name
         $userData['name'] = $userData['first_name'] . ' ' . $userData['last_name'];
         
@@ -32,17 +38,38 @@ class AuthService
         // Remove fields not needed for user creation
         unset($userData['first_name'], $userData['last_name'], $userData['company']);
         
-        $user = $this->authRepository->createUser($userData);
-        
-        // Send email verification
-        event(new Registered($user));
-        
-        $token = JWTAuth::fromUser($user);
+        try {
+            DB::beginTransaction();
+            
+            // Create the user
+            $user = $this->authRepository->createUser($userData);
+            
+            // Create the user's first company (skip validation during registration)
+            $company = $this->companyService->createCompany([
+                'name' => $companyName,
+                'is_active' => true,
+            ], $user, true); // skipValidation = true
+            
+            // Set the created company as default
+            $user->update(['default_company_id' => $company->id]);
+            
+            // Send email verification
+            event(new Registered($user));
+            
+            DB::commit();
+            
+            $token = JWTAuth::fromUser($user);
 
-        return [
-            'user' => $user,
-            'token' => $token,
-        ];
+            return [
+                'user' => $user->fresh(), // Refresh to get default_company_id
+                'token' => $token,
+                'company' => $company,
+            ];
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            throw $e;
+        }
     }
 
     /**

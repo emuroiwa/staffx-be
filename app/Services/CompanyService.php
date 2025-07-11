@@ -46,19 +46,22 @@ class CompanyService
     /**
      * Create a new company
      */
-    public function createCompany(array $data, User $user): Company
+    public function createCompany(array $data, User $user, bool $skipValidation = false): Company
     {
         if (!$user->isHoldingCompanyAdmin()) {
             throw new \Exception('Only Holding Company Admins can create companies');
         }
 
-        // Check trial status
-        if (!$user->hasActiveTrial()) {
-            throw new \Exception('Your trial has expired. Please upgrade to create new companies.');
-        }
+        // Skip validation during registration
+        if (!$skipValidation) {
+            // Check trial status
+            if (!$user->hasActiveTrial()) {
+                throw new \Exception('Your trial has expired. Please upgrade to create new companies.');
+            }
 
-        // Validate company limit based on trial/subscription
-        $this->validateCompanyLimit($user);
+            // Validate company limit based on trial/subscription
+            $this->validateCompanyLimit($user);
+        }
 
         try {
             DB::beginTransaction();
@@ -66,8 +69,8 @@ class CompanyService
             // Create the company
             $company = $this->companyRepository->createCompany($data, $user);
 
-            // Set as default company if user doesn't have one
-            if (!$user->default_company_id) {
+            // Set as default company if user doesn't have one (skip during registration)
+            if (!$skipValidation && !$user->default_company_id) {
                 $this->setDefaultCompany($company->id, $user);
             }
 
@@ -76,7 +79,8 @@ class CompanyService
             Log::info('Company created successfully', [
                 'company_id' => $company->id,
                 'user_id' => $user->id,
-                'company_name' => $company->name
+                'company_name' => $company->name,
+                'during_registration' => $skipValidation
             ]);
 
             return $company;
@@ -86,7 +90,8 @@ class CompanyService
             Log::error('Failed to create company', [
                 'user_id' => $user->id,
                 'error' => $e->getMessage(),
-                'data' => $data
+                'data' => $data,
+                'during_registration' => $skipValidation
             ]);
             throw $e;
         }

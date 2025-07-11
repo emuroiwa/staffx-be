@@ -40,7 +40,18 @@ class RegistrationTest extends TestCase
                         'id',
                         'name',
                         'email',
-                        'company',
+                        'role',
+                        'trial_expires_at',
+                        'default_company_id',
+                        'created_at',
+                        'updated_at',
+                    ],
+                    'company' => [
+                        'id',
+                        'name',
+                        'slug',
+                        'created_by',
+                        'is_active',
                         'created_at',
                         'updated_at',
                     ],
@@ -52,15 +63,24 @@ class RegistrationTest extends TestCase
                 'message' => 'Registration successful',
             ]);
 
+        // Check user was created with HCA role and trial
         $this->assertDatabaseHas('users', [
             'name' => 'John Doe',
             'email' => 'john@example.com',
-            'company' => 'Example Corp',
+            'role' => 'holding_company_admin',
         ]);
 
-        // Verify password is hashed
+        // Check company was created
+        $this->assertDatabaseHas('companies', [
+            'name' => 'Example Corp',
+        ]);
+
+        // Verify password is hashed and user setup
         $user = User::where('email', 'john@example.com')->first();
         $this->assertTrue(Hash::check('password123', $user->password));
+        $this->assertNotNull($user->default_company_id);
+        $this->assertTrue($user->hasActiveTrial());
+        $this->assertEquals('holding_company_admin', $user->role);
     }
 
     public function test_registration_validation_errors()

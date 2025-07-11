@@ -576,4 +576,44 @@ class CompanyManagementTest extends TestCase
                 ]
             ]);
     }
+
+    public function test_registration_creates_company_and_sets_as_default()
+    {
+        $userData = [
+            'first_name' => 'Jane',
+            'last_name' => 'Smith',
+            'email' => 'jane@newcompany.com',
+            'company' => 'Jane\'s Company',
+            'password' => 'password123',
+            'password_confirmation' => 'password123',
+        ];
+
+        $response = $this->postJson('/api/auth/register', $userData);
+
+        $response->assertCreated();
+
+        // Check user was created
+        $user = User::where('email', 'jane@newcompany.com')->first();
+        $this->assertNotNull($user);
+        $this->assertEquals('holding_company_admin', $user->role);
+        $this->assertNotNull($user->trial_expires_at);
+
+        // Check company was created
+        $company = Company::where('name', 'Jane\'s Company')->first();
+        $this->assertNotNull($company);
+        $this->assertEquals($user->id, $company->created_by);
+        $this->assertTrue($company->is_active);
+
+        // Check company was set as default
+        $this->assertEquals($company->id, $user->default_company_id);
+
+        // Check response structure includes both user and company
+        $response->assertJsonStructure([
+            'data' => [
+                'user' => ['id', 'name', 'email', 'role', 'default_company_id'],
+                'company' => ['id', 'name', 'slug', 'created_by'],
+                'token'
+            ]
+        ]);
+    }
 }
