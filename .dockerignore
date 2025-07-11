@@ -1,0 +1,65 @@
+# Laravel Docker ignore file
+
+# Dependencies
+/vendor
+node_modules
+npm-debug.log
+yarn-error.log
+
+# Environment files
+.env
+.env.local
+.env.*.local
+.env.testing
+
+# Build artifacts
+/public/hot
+/public/storage
+/storage/*.key
+
+# IDE files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+/storage/logs/*
+
+# Cache
+/bootstrap/cache/*
+/storage/framework/cache/*
+/storage/framework/sessions/*
+/storage/framework/views/*
+
+# Testing
+.phpunit.result.cache
+/coverage
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose*.yml
+
+# Documentation
+README.md
+*.md
+
+# Backup files
+*.backup
+*.sql
+
+# Temporary files
+/tmp
+/temp
