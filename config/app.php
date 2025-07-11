@@ -123,4 +123,33 @@ return [
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Trial Configuration
+    |--------------------------------------------------------------------------
+    |
+    | Configuration options for trial users and company limits.
+    |
+    */
+
+    'trial_company_limit' => env('TRIAL_COMPANY_LIMIT', 3),
+    'trial_duration_days' => env('TRIAL_DURATION_DAYS', 30),
+    'trial_employee_limit' => env('TRIAL_EMPLOYEE_LIMIT', 10),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Company Configuration
+    |--------------------------------------------------------------------------
+    |
+    | Configuration options for company management.
+    |
+    */
+
+    'default_company_settings' => [
+        'currency' => 'USD',
+        'timezone' => 'UTC',
+        'date_format' => 'Y-m-d',
+        'payroll_frequency' => 'monthly',
+    ],
+
 ];

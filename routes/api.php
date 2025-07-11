@@ -153,28 +153,43 @@ Route::middleware(['auth:api', 'company.context'])->prefix('payrolls')->group(fu
 // Company management routes
 Route::middleware(['auth:api'])->prefix('companies')->group(function () {
     // List companies (HCA gets their created companies, others get their current company)
-    Route::get('/', [CompanyController::class, 'index'])
-        ->middleware('permission:view_all_companies');
+    Route::get('/', [CompanyController::class, 'index']);
     
     // Create new company (HCA only)
-    Route::post('/', [CompanyController::class, 'store'])
-        ->middleware('permission:create_companies');
+    Route::post('/', [CompanyController::class, 'store']);
+    
+    // Search companies (HCA only)
+    Route::get('/search', [CompanyController::class, 'search']);
+    
+    // Get companies for selection/dropdown (HCA only)
+    Route::get('/selection', [CompanyController::class, 'selection']);
+    
+    // Dashboard statistics (HCA only)
+    Route::get('/dashboard', [CompanyController::class, 'dashboard']);
     
     // Default company management (HCA only)
-    Route::get('/default', [CompanyController::class, 'getDefault'])
-        ->middleware('permission:manage_default_company');
+    Route::get('/default', [CompanyController::class, 'getDefault']);
+    
+    // Bulk operations (HCA only)
+    Route::patch('/bulk/status', [CompanyController::class, 'bulkUpdateStatus']);
+    
+    // Company by slug
+    Route::get('/slug/{slug}', [CompanyController::class, 'getBySlug']);
     
     // Individual company routes
-    Route::get('/{company}', [CompanyController::class, 'show']);
+    Route::get('/{id}', [CompanyController::class, 'show'])
+        ->where('id', '[0-9]+');
     
-    Route::put('/{company}', [CompanyController::class, 'update']);
+    Route::put('/{id}', [CompanyController::class, 'update'])
+        ->where('id', '[0-9]+');
     
-    Route::delete('/{company}', [CompanyController::class, 'destroy'])
-        ->middleware('permission:manage_companies');
+    Route::delete('/{id}', [CompanyController::class, 'destroy'])
+        ->where('id', '[0-9]+');
     
-    Route::get('/{company}/stats', [CompanyController::class, 'stats']);
+    Route::get('/{id}/stats', [CompanyController::class, 'stats'])
+        ->where('id', '[0-9]+');
     
     // Set default company (HCA only)
-    Route::post('/{company}/set-default', [CompanyController::class, 'setDefault'])
-        ->middleware('permission:manage_default_company');
+    Route::post('/{id}/set-default', [CompanyController::class, 'setDefault'])
+        ->where('id', '[0-9]+');
 });
