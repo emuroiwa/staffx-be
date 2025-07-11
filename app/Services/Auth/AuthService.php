@@ -5,6 +5,7 @@ namespace App\Services\Auth;
 use App\Models\User;
 use App\Repositories\Auth\AuthRepository;
 use Illuminate\Support\Facades\Password;
+use Illuminate\Auth\Events\Registered;
 use Tymon\JWTAuth\Facades\JWTAuth;
 
 class AuthService
@@ -24,10 +25,18 @@ class AuthService
         // Combine first and last name
         $userData['name'] = $userData['first_name'] . ' ' . $userData['last_name'];
         
-        // Remove first_name and last_name from userData
-        unset($userData['first_name'], $userData['last_name']);
+        // Set user as HCA with 1-month trial
+        $userData['role'] = 'holding_company_admin';
+        $userData['trial_expires_at'] = now()->addMonth();
+        
+        // Remove fields not needed for user creation
+        unset($userData['first_name'], $userData['last_name'], $userData['company']);
         
         $user = $this->authRepository->createUser($userData);
+        
+        // Send email verification
+        event(new Registered($user));
+        
         $token = JWTAuth::fromUser($user);
 
         return [
@@ -49,6 +58,11 @@ class AuthService
         
         if (!$user || !$this->authRepository->verifyPassword($user, $password)) {
             return null;
+        }
+
+        // Check if email is verified
+        if (!$user->hasVerifiedEmail()) {
+            throw new \Exception('Email not verified. Please check your email for verification link.');
         }
 
         $token = JWTAuth::fromUser($user);
@@ -146,5 +160,37 @@ class AuthService
         );
 
         return $status === Password::PASSWORD_RESET;
+    }
+
+    /**
+     * Verify email address.
+     *
+     * @param User $user
+     * @return bool
+     */
+    public function verifyEmail(User $user): bool
+    {
+        if ($user->hasVerifiedEmail()) {
+            return true;
+        }
+
+        $user->markEmailAsVerified();
+        return true;
+    }
+
+    /**
+     * Resend email verification.
+     *
+     * @param User $user
+     * @return bool
+     */
+    public function resendEmailVerification(User $user): bool
+    {
+        if ($user->hasVerifiedEmail()) {
+            return false;
+        }
+
+        $user->sendEmailVerificationNotification();
+        return true;
     }
 }

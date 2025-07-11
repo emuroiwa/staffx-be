@@ -62,12 +62,13 @@ FROM php:8.2-fpm-alpine AS production
 # Install runtime dependencies only
 RUN apk add --no-cache \
     freetype \
+    freetype-dev \
     libjpeg-turbo-dev \
     libpng-dev \
-    libzip \
+    libzip-dev \
     zlib-dev \
     oniguruma \
-    postgresql-libs \
+    postgresql-dev \
     mysql-client \
     nginx \
     supervisor \

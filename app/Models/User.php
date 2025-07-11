@@ -2,13 +2,16 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Tymon\JWTAuth\Contracts\JWTSubject;
+use App\Notifications\CustomVerifyEmail;
 
-class User extends Authenticatable implements JWTSubject
+class User extends Authenticatable implements JWTSubject, MustVerifyEmail
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasFactory, Notifiable;
@@ -21,8 +24,13 @@ class User extends Authenticatable implements JWTSubject
     protected $fillable = [
         'name',
         'email',
-        'company',
+        'company_id',
+        'default_company_id',
+        'trial_expires_at',
+        'role',
+        'company', // Keep for backward compatibility during migration
         'password',
+        'avatar',
     ];
 
     /**
@@ -44,6 +52,7 @@ class User extends Authenticatable implements JWTSubject
     {
         return [
             'email_verified_at' => 'datetime',
+            'trial_expires_at' => 'datetime',
             'password' => 'hashed',
         ];
     }
@@ -66,5 +75,214 @@ class User extends Authenticatable implements JWTSubject
     public function getJWTCustomClaims()
     {
         return [];
+    }
+
+    /**
+     * Send the email verification notification.
+     *
+     * @return void
+     */
+    public function sendEmailVerificationNotification()
+    {
+        $this->notify(new CustomVerifyEmail);
+    }
+
+    /**
+     * Get the user's settings.
+     */
+    public function settings(): HasMany
+    {
+        return $this->hasMany(UserSettings::class);
+    }
+
+    /**
+     * Get a specific setting value.
+     */
+    public function getSetting(string $key, $default = null)
+    {
+        $setting = $this->settings()->where('key', $key)->first();
+        return $setting ? $setting->getTypedValue() : $default;
+    }
+
+    /**
+     * Set a specific setting value.
+     */
+    public function setSetting(string $key, $value): void
+    {
+        $setting = $this->settings()->firstOrNew(['key' => $key]);
+        $setting->setTypedValue($value);
+        $setting->save();
+    }
+
+    /**
+     * Get all settings as an associative array.
+     */
+    public function getAllSettings(): array
+    {
+        return $this->settings->pluck('value', 'key')
+            ->map(function ($value, $key) {
+                $setting = $this->settings->firstWhere('key', $key);
+                return $setting ? $setting->getTypedValue() : $value;
+            })
+            ->toArray();
+    }
+
+    /**
+     * Get the companies created by this user (HCA only).
+     */
+    public function ownedCompanies(): HasMany
+    {
+        return $this->hasMany(Company::class, 'created_by');
+    }
+
+    /**
+     * Get the default company for this user.
+     */
+    public function defaultCompany(): BelongsTo
+    {
+        return $this->belongsTo(Company::class, 'default_company_id');
+    }
+
+    /**
+     * Get the company that owns the user.
+     */
+    public function company(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(Company::class);
+    }
+
+    /**
+     * Get the employee record associated with this user.
+     */
+    public function employee(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(Employee::class);
+    }
+
+    /**
+     * Check if user is holding company admin (HCA).
+     */
+    public function isHoldingCompanyAdmin(): bool
+    {
+        return $this->role === 'holding_company_admin';
+    }
+
+    /**
+     * Check if user has active trial.
+     */
+    public function hasActiveTrial(): bool
+    {
+        return $this->trial_expires_at && $this->trial_expires_at->isFuture();
+    }
+
+    /**
+     * Get days left in trial.
+     */
+    public function getDaysLeftInTrial(): int
+    {
+        if (!$this->hasActiveTrial()) {
+            return 0;
+        }
+        
+        return (int) now()->diffInDays($this->trial_expires_at, false);
+    }
+
+    /**
+     * Check if user can access the system (trial active or subscription).
+     */
+    public function canAccessSystem(): bool
+    {
+        if ($this->isHoldingCompanyAdmin()) {
+            return $this->hasActiveTrial();
+        }
+        
+        // For other roles, check if their company has active subscription
+        return $this->company && $this->company->hasActiveSubscription();
+    }
+
+    /**
+     * Check if user is company admin.
+     */
+    public function isCompanyAdmin(): bool
+    {
+        return $this->role === 'admin';
+    }
+
+    /**
+     * Check if user is manager.
+     */
+    public function isManager(): bool
+    {
+        return in_array($this->role, ['admin', 'manager']);
+    }
+
+    /**
+     * Check if user is HR.
+     */
+    public function isHR(): bool
+    {
+        return in_array($this->role, ['admin', 'hr']);
+    }
+
+    /**
+     * Check if user can manage employees.
+     */
+    public function canManageEmployees(): bool
+    {
+        return in_array($this->role, ['admin', 'manager', 'hr']);
+    }
+
+    /**
+     * Check if user can manage payroll.
+     */
+    public function canManagePayroll(): bool
+    {
+        return in_array($this->role, ['admin', 'hr']);
+    }
+
+    /**
+     * Get user's permissions based on role.
+     */
+    public function getPermissions(): array
+    {
+        return match($this->role) {
+            'holding_company_admin' => [
+                'manage_companies',
+                'create_companies',
+                'view_all_companies',
+                'manage_default_company',
+                'manage_trial',
+            ],
+            'admin' => [
+                'manage_company',
+                'manage_users',
+                'manage_employees',
+                'manage_payroll',
+                'view_reports',
+                'manage_settings',
+            ],
+            'manager' => [
+                'manage_employees',
+                'view_reports',
+            ],
+            'hr' => [
+                'manage_employees',
+                'manage_payroll',
+                'view_reports',
+            ],
+            'employee' => [
+                'view_own_profile',
+                'view_own_payroll',
+            ],
+            default => [],
+        };
+    }
+
+    /**
+     * Check if user has specific permission.
+     */
+    public function hasPermission(string $permission): bool
+    {
+        return in_array($permission, $this->getPermissions());
     }
 }

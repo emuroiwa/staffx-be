@@ -10,14 +10,19 @@ use App\Http\Requests\Auth\ResetPasswordRequest;
 use App\Http\Requests\Auth\UpdateProfileRequest;
 use App\Http\Resources\Auth\UserResource;
 use App\Services\Auth\AuthService;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Foundation\Auth\EmailVerificationRequest;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 
 class AuthController extends Controller
 {
     public function __construct(
         protected AuthService $authService
     ) {
-        $this->middleware('auth:api')->except(['login', 'register', 'forgotPassword', 'resetPassword']);
+        //
     }
 
     /**
@@ -25,26 +30,33 @@ class AuthController extends Controller
      */
     public function login(LoginRequest $request): JsonResponse
     {
-        $result = $this->authService->login(
-            $request->validated('email'),
-            $request->validated('password')
-        );
+        try {
+            $result = $this->authService->login(
+                $request->validated('email'),
+                $request->validated('password')
+            );
 
-        if (!$result) {
+            if (!$result) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid credentials',
+                ], 401);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Login successful',
+                'data' => [
+                    'token' => $result['token'],
+                    'user' => new UserResource($result['user']),
+                ],
+            ]);
+        } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Invalid credentials',
-            ], 401);
+                'message' => "Invalid credentials",
+            ], 400);
         }
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Login successful',
-            'data' => [
-                'token' => $result['token'],
-                'user' => new UserResource($result['user']),
-            ],
-        ]);
     }
 
     /**
@@ -188,5 +200,200 @@ class AuthController extends Controller
             'success' => true,
             'message' => 'Password reset successfully',
         ]);
+    }
+
+    /**
+     * Verify email address.
+     */
+    public function verifyEmail(Request $request): JsonResponse
+    {
+        $user = User::findOrFail($request->route('id'));
+
+        if (!hash_equals((string) $request->route('hash'), sha1($user->getEmailForVerification()))) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid verification link',
+            ], 400);
+        }
+
+        if ($user->hasVerifiedEmail()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Email already verified',
+            ]);
+        }
+
+        $this->authService->verifyEmail($user);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Email verified successfully',
+        ]);
+    }
+
+    /**
+     * Resend email verification.
+     */
+    public function resendEmailVerification(): JsonResponse
+    {
+        $user = $this->authService->getAuthenticatedUser();
+
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthenticated',
+            ], 401);
+        }
+
+        if ($user->hasVerifiedEmail()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Email already verified',
+            ], 400);
+        }
+
+        $this->authService->resendEmailVerification($user);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Verification email sent',
+        ]);
+    }
+
+    /**
+     * Change password.
+     */
+    public function changePassword(Request $request): JsonResponse
+    {
+        $request->validate([
+            'current_password' => 'required|string',
+            'new_password' => 'required|string|min:8|confirmed',
+        ]);
+
+        $user = $this->authService->getAuthenticatedUser();
+
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthenticated',
+            ], 401);
+        }
+
+        // Verify current password
+        if (!Hash::check($request->current_password, $user->password)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Current password is incorrect',
+            ], 400);
+        }
+
+        // Update password
+        $user->password = Hash::make($request->new_password);
+        $user->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Password changed successfully',
+        ]);
+    }
+
+    /**
+     * Upload user avatar.
+     */
+    public function uploadAvatar(Request $request): JsonResponse
+    {
+        $request->validate([
+            'avatar' => 'required|image|mimes:jpeg,png,jpg,gif|max:2048',
+        ]);
+
+        try {
+            $user = $this->authService->getAuthenticatedUser();
+
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthenticated',
+                ], 401);
+            }
+
+            if ($request->hasFile('avatar')) {
+                // Delete old avatar if exists
+                if ($user->avatar && Storage::disk('public')->exists($user->avatar)) {
+                    Storage::disk('public')->delete($user->avatar);
+                }
+
+                // Store new avatar
+                $avatarPath = $request->file('avatar')->store('avatars', 'public');
+                
+                // Update user avatar path
+                $user->avatar = $avatarPath;
+                $user->save();
+
+                // Generate full URL for avatar
+                $avatarUrl = Storage::disk('public')->url($avatarPath);
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Avatar uploaded successfully',
+                    'data' => [
+                        'avatar_url' => $avatarUrl,
+                        'user' => new UserResource($user),
+                    ],
+                ]);
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => 'No avatar file provided',
+            ], 400);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to upload avatar',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Remove user avatar.
+     */
+    public function removeAvatar(): JsonResponse
+    {
+        try {
+            $user = $this->authService->getAuthenticatedUser();
+
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthenticated',
+                ], 401);
+            }
+
+            // Delete avatar file if exists
+            if ($user->avatar && Storage::disk('public')->exists($user->avatar)) {
+                Storage::disk('public')->delete($user->avatar);
+            }
+
+            // Remove avatar path from user
+            $user->avatar = null;
+            $user->save();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Avatar removed successfully',
+                'data' => [
+                    'user' => new UserResource($user),
+                ],
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to remove avatar',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
     }
 }
