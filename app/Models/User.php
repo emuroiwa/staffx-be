@@ -26,7 +26,6 @@ class User extends Authenticatable implements JWTSubject, MustVerifyEmail
         'email',
         'company_id',
         'default_company_id',
-        'trial_expires_at',
         'role',
         'company', // Keep for backward compatibility during migration
         'password',
@@ -52,7 +51,6 @@ class User extends Authenticatable implements JWTSubject, MustVerifyEmail
     {
         return [
             'email_verified_at' => 'datetime',
-            'trial_expires_at' => 'datetime',
             'password' => 'hashed',
         ];
     }
@@ -168,36 +166,65 @@ class User extends Authenticatable implements JWTSubject, MustVerifyEmail
     }
 
     /**
-     * Check if user has active trial.
+     * Check if user has active subscription through their company.
      */
-    public function hasActiveTrial(): bool
+    public function hasActiveSubscription(): bool
     {
-        return $this->trial_expires_at && $this->trial_expires_at->isFuture();
+        return $this->company && $this->company->hasActiveSubscription();
     }
 
     /**
-     * Get days left in trial.
+     * Get days left in subscription through company.
      */
-    public function getDaysLeftInTrial(): int
+    public function getDaysLeftInSubscription(): int
     {
-        if (!$this->hasActiveTrial()) {
+        if (!$this->company) {
             return 0;
         }
         
-        return (int) now()->diffInDays($this->trial_expires_at, false);
+        return $this->company->getDaysLeftInSubscription();
     }
 
     /**
-     * Check if user can access the system (trial active or subscription).
+     * Get subscription status through company.
+     */
+    public function getSubscriptionStatus(): ?string
+    {
+        return $this->company?->getSubscriptionStatus();
+    }
+
+    /**
+     * Backward compatibility for hasActiveTrial - now delegates to company subscription.
+     */
+    public function hasActiveTrial(): bool
+    {
+        return $this->hasActiveSubscription();
+    }
+
+    /**
+     * Backward compatibility for getDaysLeftInTrial - now delegates to company subscription.
+     */
+    public function getDaysLeftInTrial(): int
+    {
+        return $this->getDaysLeftInSubscription();
+    }
+
+    /**
+     * Check if user can access the system (company subscription active).
      */
     public function canAccessSystem(): bool
     {
         if ($this->isHoldingCompanyAdmin()) {
-            return $this->hasActiveTrial();
+            // HCA users can access if any of their owned companies has active subscription
+            return $this->ownedCompanies()->whereHas('users', function($query) {
+                $query->where('users.id', $this->id);
+            })->get()->some(function($company) {
+                return $company->hasActiveSubscription();
+            }) || $this->hasActiveSubscription();
         }
         
         // For other roles, check if their company has active subscription
-        return $this->company && $this->company->hasActiveSubscription();
+        return $this->hasActiveSubscription();
     }
 
     /**

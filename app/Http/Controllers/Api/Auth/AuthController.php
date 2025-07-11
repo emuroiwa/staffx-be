@@ -61,6 +61,15 @@ class AuthController extends Controller
                 ], 403);
             }
             
+            // Check if it's a subscription expired error
+            if (str_contains($e->getMessage(), 'subscription has expired')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $e->getMessage(),
+                    'subscription_expired' => true,
+                ], 403);
+            }
+            
             return response()->json([
                 'success' => false,
                 'message' => "Invalid credentials",

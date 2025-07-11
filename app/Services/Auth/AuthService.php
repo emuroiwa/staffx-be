@@ -31,9 +31,8 @@ class AuthService
         // Combine first and last name
         $userData['name'] = $userData['first_name'] . ' ' . $userData['last_name'];
         
-        // Set user as HCA with 1-month trial
+        // Set user as HCA
         $userData['role'] = 'holding_company_admin';
-        $userData['trial_expires_at'] = now()->addMonth();
         
         // Remove fields not needed for user creation
         unset($userData['first_name'], $userData['last_name'], $userData['company']);
@@ -50,8 +49,14 @@ class AuthService
                 'is_active' => true,
             ], $user, true); // skipValidation = true
             
-            // Set the created company as default
-            $user->update(['default_company_id' => $company->id]);
+            // Start trial subscription for the company
+            $company->startTrialSubscription();
+            
+            // Link user to the company and set as default
+            $user->update([
+                'company_id' => $company->id,
+                'default_company_id' => $company->id
+            ]);
             
             // Send email verification
             event(new Registered($user));
@@ -89,7 +94,29 @@ class AuthService
 
         // Check if email is verified
         if (!$user->hasVerifiedEmail()) {
-            throw new \Exception('Email not verified. Please check your email for verification link.');
+            throw new \Exception('Invalid credentials');
+        }
+
+        // Check subscription status - load company relationship
+        $user->load('company');
+        
+        // For HCA users, check if they have any active company subscriptions
+        if ($user->isHoldingCompanyAdmin()) {
+            $hasActiveSubscription = $user->ownedCompanies()
+                ->where('is_active', true)
+                ->get()
+                ->some(function($company) {
+                    return $company->hasActiveSubscription();
+                });
+                
+            if (!$hasActiveSubscription) {
+                throw new \Exception('Your subscription has expired. Please upgrade to continue using the system.');
+            }
+        } else {
+            // For regular users, check their assigned company subscription
+            if (!$user->hasActiveSubscription()) {
+                throw new \Exception('Your company\'s subscription has expired. Please contact your administrator.');
+            }
         }
 
         $token = JWTAuth::fromUser($user);

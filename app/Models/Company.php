@@ -127,4 +127,78 @@ class Company extends Model
         return $this->is_active && 
                ($this->subscription_expires_at === null || $this->subscription_expires_at->isFuture());
     }
+
+    /**
+     * Check if subscription is expired.
+     */
+    public function hasExpiredSubscription(): bool
+    {
+        return $this->subscription_expires_at && $this->subscription_expires_at->isPast();
+    }
+
+    /**
+     * Get days left in subscription.
+     */
+    public function getDaysLeftInSubscription(): int
+    {
+        if (!$this->subscription_expires_at) {
+            return 0;
+        }
+        
+        return max(0, (int) now()->diffInDays($this->subscription_expires_at, false));
+    }
+
+    /**
+     * Check if subscription is expiring soon (within 7 days).
+     */
+    public function isSubscriptionExpiringSoon(): bool
+    {
+        return $this->hasActiveSubscription() && $this->getDaysLeftInSubscription() <= 7;
+    }
+
+    /**
+     * Get subscription status.
+     */
+    public function getSubscriptionStatus(): string
+    {
+        if (!$this->subscription_expires_at) {
+            return 'trial'; // No subscription set means trial/free
+        }
+        
+        $daysLeft = $this->getDaysLeftInSubscription();
+        
+        if ($daysLeft > 7) {
+            return 'active';
+        } elseif ($daysLeft > 0) {
+            return 'expiring_soon';
+        } else {
+            return 'expired';
+        }
+    }
+
+    /**
+     * Extend subscription by given months.
+     */
+    public function extendSubscription(int $months): void
+    {
+        $currentExpiry = $this->subscription_expires_at ?? now();
+        
+        // If subscription is expired, extend from now
+        if ($this->hasExpiredSubscription()) {
+            $currentExpiry = now();
+        }
+        
+        $this->subscription_expires_at = $currentExpiry->addMonths($months);
+        $this->save();
+    }
+
+    /**
+     * Start trial subscription (1 month from now).
+     */
+    public function startTrialSubscription(): void
+    {
+        $this->subscription_expires_at = now()->addMonth();
+        $this->is_active = true;
+        $this->save();
+    }
 }

@@ -54,12 +54,12 @@ class CompanyService
 
         // Skip validation during registration
         if (!$skipValidation) {
-            // Check trial status
-            if (!$user->hasActiveTrial()) {
-                throw new \Exception('Your trial has expired. Please upgrade to create new companies.');
+            // Check subscription status through user's company
+            if (!$user->hasActiveSubscription()) {
+                throw new \Exception('Your subscription has expired. Please upgrade to create new companies.');
             }
 
-            // Validate company limit based on trial/subscription
+            // Validate company limit based on subscription
             $this->validateCompanyLimit($user);
         }
 
@@ -296,13 +296,13 @@ class CompanyService
     {
         $activeCompaniesCount = $this->companyRepository->getActiveCompaniesCount($user);
         
-        // Define limits based on trial/subscription status
-        if ($user->hasActiveTrial()) {
+        // Define limits based on subscription status through user's company
+        if (!$user->hasActiveSubscription()) {
             return $activeCompaniesCount >= config('app.trial_company_limit', 3);
         }
 
-        // For paid users, you can define different limits or unlimited
-        return false; // Unlimited for paid users
+        // For subscribed users, you can define different limits or unlimited
+        return false; // Unlimited for subscribed users
     }
 
     /**
@@ -327,7 +327,7 @@ class CompanyService
     private function validateCompanyLimit(User $user): void
     {
         if ($this->hasReachedCompanyLimit($user)) {
-            if ($user->hasActiveTrial()) {
+            if (!$user->hasActiveSubscription()) {
                 $limit = config('app.trial_company_limit', 3);
                 throw new \Exception("Trial users are limited to {$limit} companies. Please upgrade to create more companies.");
             }
@@ -351,19 +351,13 @@ class CompanyService
         $activeCompanies = $this->companyRepository->getActiveCompaniesCount($user);
         $defaultCompany = $this->getDefaultCompany($user);
         
-        // Calculate trial info
-        $trialDaysLeft = 0;
-        $trialStatus = 'no_trial';
+        // Calculate subscription info through user's company
+        $subscriptionDaysLeft = 0;
+        $subscriptionStatus = 'no_subscription';
         
-        if ($user->trial_expires_at) {
-            $trialDaysLeft = max(0, now()->diffInDays($user->trial_expires_at, false));
-            if ($trialDaysLeft > 7) {
-                $trialStatus = 'active';
-            } elseif ($trialDaysLeft > 0) {
-                $trialStatus = 'expiring_soon';
-            } else {
-                $trialStatus = 'expired';
-            }
+        if ($user->company && $user->company->subscription_expires_at) {
+            $subscriptionDaysLeft = $user->company->getDaysLeftInSubscription();
+            $subscriptionStatus = $user->company->getSubscriptionStatus();
         }
 
         return [
@@ -371,8 +365,10 @@ class CompanyService
             'active_companies' => $activeCompanies,
             'inactive_companies' => $totalCompanies - $activeCompanies,
             'default_company' => $defaultCompany,
-            'trial_days_left' => $trialDaysLeft,
-            'trial_status' => $trialStatus,
+            'trial_days_left' => $subscriptionDaysLeft, // Keep for backward compatibility
+            'trial_status' => $subscriptionStatus, // Keep for backward compatibility
+            'subscription_days_left' => $subscriptionDaysLeft,
+            'subscription_status' => $subscriptionStatus,
             'company_limit' => config('app.trial_company_limit', 3),
             'has_reached_limit' => $this->hasReachedCompanyLimit($user),
         ];
