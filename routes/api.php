@@ -4,6 +4,8 @@ use App\Http\Controllers\Api\Auth\AuthController;
 use App\Http\Controllers\Api\UserDataController;
 use App\Http\Controllers\Api\UserSettingsController;
 use App\Http\Controllers\Api\EmployeeController;
+use App\Http\Controllers\Api\PositionController;
+use App\Http\Controllers\Api\DepartmentController;
 use App\Http\Controllers\Api\PayrollController;
 use App\Http\Controllers\Api\CompanyController;
 use Illuminate\Http\Request;
@@ -108,25 +110,80 @@ Route::middleware('auth:api')->prefix('user')->group(function () {
 Route::get('user/download-export/{filename}', [UserDataController::class, 'downloadExport'])
     ->name('user.download-export');
 
-// Employee management routes (company-scoped)
-Route::middleware(['auth:api', 'company.context'])->prefix('employees')->group(function () {
-    Route::get('/', [EmployeeController::class, 'index'])
-        ->middleware('permission:manage_employees');
+// Employee Management Module routes (company-scoped)
+Route::middleware(['auth:api', 'company.context'])->group(function () {
     
-    Route::post('/', [EmployeeController::class, 'store'])
-        ->middleware('permission:manage_employees');
+    // Employee routes
+    Route::prefix('employees')->group(function () {
+        Route::get('/', [EmployeeController::class, 'index'])
+            ->middleware('permission:manage_employees');
+        
+        Route::post('/', [EmployeeController::class, 'store'])
+            ->middleware('permission:manage_employees');
+        
+        Route::get('/statistics', [EmployeeController::class, 'statistics'])
+            ->middleware('permission:view_reports');
+        
+        Route::get('/organogram', [EmployeeController::class, 'organogram'])
+            ->middleware('permission:view_reports');
+        
+        Route::get('/potential-managers/{employee?}', [EmployeeController::class, 'potentialManagers'])
+            ->middleware('permission:manage_employees');
+        
+        Route::get('/{employee}', [EmployeeController::class, 'show'])
+            ->middleware('permission:manage_employees');
+        
+        Route::put('/{employee}', [EmployeeController::class, 'update'])
+            ->middleware('permission:manage_employees');
+        
+        Route::delete('/{employee}', [EmployeeController::class, 'destroy'])
+            ->middleware('permission:manage_employees');
+        
+        Route::patch('/{employee}/status', [EmployeeController::class, 'updateStatus'])
+            ->middleware('permission:manage_employees');
+    });
     
-    Route::get('/departments', [EmployeeController::class, 'departments'])
-        ->middleware('permission:manage_employees');
+    // Position routes
+    Route::prefix('positions')->group(function () {
+        Route::get('/', [PositionController::class, 'index'])
+            ->middleware('permission:manage_employees');
+        
+        Route::post('/', [PositionController::class, 'store'])
+            ->middleware('permission:manage_employees');
+        
+        Route::get('/statistics', [PositionController::class, 'statistics'])
+            ->middleware('permission:view_reports');
+        
+        Route::get('/{position}', [PositionController::class, 'show'])
+            ->middleware('permission:manage_employees');
+        
+        Route::put('/{position}', [PositionController::class, 'update'])
+            ->middleware('permission:manage_employees');
+        
+        Route::delete('/{position}', [PositionController::class, 'destroy'])
+            ->middleware('permission:manage_employees');
+    });
     
-    Route::get('/{employee}', [EmployeeController::class, 'show'])
-        ->middleware('permission:manage_employees');
-    
-    Route::put('/{employee}', [EmployeeController::class, 'update'])
-        ->middleware('permission:manage_employees');
-    
-    Route::delete('/{employee}', [EmployeeController::class, 'destroy'])
-        ->middleware('permission:manage_employees');
+    // Department routes
+    Route::prefix('departments')->group(function () {
+        Route::get('/', [DepartmentController::class, 'index'])
+            ->middleware('permission:manage_employees');
+        
+        Route::post('/', [DepartmentController::class, 'store'])
+            ->middleware('permission:manage_employees');
+        
+        Route::get('/statistics', [DepartmentController::class, 'statistics'])
+            ->middleware('permission:view_reports');
+        
+        Route::get('/{department}', [DepartmentController::class, 'show'])
+            ->middleware('permission:manage_employees');
+        
+        Route::put('/{department}', [DepartmentController::class, 'update'])
+            ->middleware('permission:manage_employees');
+        
+        Route::delete('/{department}', [DepartmentController::class, 'destroy'])
+            ->middleware('permission:manage_employees');
+    });
 });
 
 // Payroll management routes (company-scoped)
