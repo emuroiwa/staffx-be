@@ -54,8 +54,8 @@ class AuthService
             
             // Link user to the company and set as default
             $user->update([
-                'company_id' => $company->id,
-                'default_company_id' => $company->id
+                'company_uuid' => $company->uuid,
+                'default_company_uuid' => $company->uuid
             ]);
             
             // Send email verification

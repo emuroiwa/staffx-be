@@ -5,28 +5,42 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Str;
 
 class UserSettings extends Model
 {
     use HasFactory;
 
+    public $incrementing = false;
+    protected $keyType = 'string';
+    protected $primaryKey = 'uuid';
+
     protected $fillable = [
-        'user_id',
+        'uuid',
+        'user_uuid',
         'key',
         'value',
         'type',
     ];
 
-    protected $casts = [
-        'user_id' => 'integer',
-    ];
+    protected static function boot()
+    {
+        parent::boot();
+
+        // Auto-generate UUID on creation
+        static::creating(function ($userSetting) {
+            if (empty($userSetting->uuid)) {
+                $userSetting->uuid = (string) Str::uuid();
+            }
+        });
+    }
 
     /**
      * Get the user that owns the setting.
      */
     public function user(): BelongsTo
     {
-        return $this->belongsTo(User::class);
+        return $this->belongsTo(User::class, 'user_uuid', 'uuid');
     }
 
     /**

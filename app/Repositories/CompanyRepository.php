@@ -16,7 +16,7 @@ class CompanyRepository
     public function getPaginatedCompanies(User $user, array $filters = [], int $perPage = 15): LengthAwarePaginator
     {
         $query = Company::query()
-            ->where('created_by', $user->id)
+            ->where('created_by_uuid', $user->uuid)
             ->with(['creator', 'users']);
 
         // Apply search filter
@@ -66,10 +66,10 @@ class CompanyRepository
     /**
      * Get single company by ID for user
      */
-    public function getCompanyById(int $id, User $user): ?Company
+    public function getCompanyByUuid(string $uuid, User $user): ?Company
     {
-        return Company::where('id', $id)
-            ->where('created_by', $user->id)
+        return Company::where('uuid', $uuid)
+            ->where('created_by_uuid', $user->uuid)
             ->with(['creator', 'users', 'employees'])
             ->first();
     }
@@ -83,7 +83,7 @@ class CompanyRepository
         $slug = $this->generateUniqueSlug($data['name']);
         
         $companyData = array_merge($data, [
-            'created_by' => $user->id,
+            'created_by_uuid' => $user->uuid,
             'slug' => $slug,
         ]);
 
@@ -97,7 +97,7 @@ class CompanyRepository
     {
         // Update slug if name changed
         if (isset($data['name']) && $data['name'] !== $company->name) {
-            $data['slug'] = $this->generateUniqueSlug($data['name'], $company->id);
+            $data['slug'] = $this->generateUniqueSlug($data['name'], $company->uuid);
         }
 
         $company->update($data);
@@ -149,9 +149,9 @@ class CompanyRepository
      */
     public function getCompaniesForUser(User $user): Collection
     {
-        return Company::where('created_by', $user->id)
+        return Company::where('created_by_uuid', $user->uuid)
             ->where('is_active', true)
-            ->select(['id', 'name', 'slug', 'is_active'])
+            ->select(['uuid', 'name', 'slug', 'is_active'])
             ->orderBy('name')
             ->get();
     }
@@ -161,7 +161,7 @@ class CompanyRepository
      */
     public function getActiveCompaniesCount(User $user): int
     {
-        return Company::where('created_by', $user->id)
+        return Company::where('created_by_uuid', $user->uuid)
             ->where('is_active', true)
             ->count();
     }
@@ -171,7 +171,7 @@ class CompanyRepository
      */
     public function searchCompanies(User $user, string $search, array $filters = []): Collection
     {
-        $query = Company::where('created_by', $user->id)
+        $query = Company::where('created_by_uuid', $user->uuid)
             ->where(function ($q) use ($search) {
                 $q->where('name', 'like', '%' . $search . '%')
                   ->orWhere('email', 'like', '%' . $search . '%')
@@ -182,29 +182,29 @@ class CompanyRepository
             $query->where('is_active', $filters['is_active']);
         }
 
-        return $query->limit(10)->get(['id', 'name', 'slug', 'email', 'is_active']);
+        return $query->limit(10)->get(['uuid', 'name', 'slug', 'email', 'is_active']);
     }
 
     /**
      * Check if company exists for user
      */
-    public function companyExistsForUser(int $companyId, User $user): bool
+    public function companyExistsForUser(string $companyUuid, User $user): bool
     {
-        return Company::where('id', $companyId)
-            ->where('created_by', $user->id)
+        return Company::where('uuid', $companyUuid)
+            ->where('created_by_uuid', $user->uuid)
             ->exists();
     }
 
     /**
      * Generate unique slug for company
      */
-    private function generateUniqueSlug(string $name, int $excludeId = null): string
+    private function generateUniqueSlug(string $name, string $excludeUuid = null): string
     {
         $baseSlug = Str::slug($name);
         $slug = $baseSlug;
         $counter = 1;
 
-        while ($this->slugExists($slug, $excludeId)) {
+        while ($this->slugExists($slug, $excludeUuid)) {
             $slug = $baseSlug . '-' . $counter;
             $counter++;
         }
@@ -215,12 +215,12 @@ class CompanyRepository
     /**
      * Check if slug exists
      */
-    private function slugExists(string $slug, int $excludeId = null): bool
+    private function slugExists(string $slug, string $excludeUuid = null): bool
     {
         $query = Company::where('slug', $slug);
         
-        if ($excludeId) {
-            $query->where('id', '!=', $excludeId);
+        if ($excludeUuid) {
+            $query->where('uuid', '!=', $excludeUuid);
         }
 
         return $query->exists();
@@ -253,10 +253,10 @@ class CompanyRepository
     /**
      * Bulk update company status
      */
-    public function bulkUpdateStatus(array $companyIds, User $user, bool $isActive): int
+    public function bulkUpdateStatus(array $companyUuids, User $user, bool $isActive): int
     {
-        return Company::whereIn('id', $companyIds)
-            ->where('created_by', $user->id)
+        return Company::whereIn('uuid', $companyUuids)
+            ->where('created_by_uuid', $user->uuid)
             ->update(['is_active' => $isActive]);
     }
 
@@ -266,7 +266,7 @@ class CompanyRepository
     public function getCompanyBySlug(string $slug, User $user): ?Company
     {
         return Company::where('slug', $slug)
-            ->where('created_by', $user->id)
+            ->where('created_by_uuid', $user->uuid)
             ->with(['creator', 'users', 'employees'])
             ->first();
     }

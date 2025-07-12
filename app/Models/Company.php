@@ -12,8 +12,16 @@ class Company extends Model
 {
     use HasFactory;
 
+    /**
+     * Indicates if the model should use UUIDs.
+     */
+    public $incrementing = false;
+    protected $keyType = 'string';
+    protected $primaryKey = 'uuid';
+
     protected $fillable = [
-        'created_by',
+        'uuid',
+        'created_by_uuid',
         'name',
         'slug',
         'domain',
@@ -46,6 +54,10 @@ class Company extends Model
         parent::boot();
 
         static::creating(function ($company) {
+            if (empty($company->uuid)) {
+                $company->uuid = Str::uuid();
+            }
+            
             if (empty($company->slug)) {
                 $company->slug = Str::slug($company->name);
                 
@@ -65,7 +77,7 @@ class Company extends Model
      */
     public function creator(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'created_by');
+        return $this->belongsTo(User::class, 'created_by_uuid', 'uuid');
     }
 
     /**
@@ -73,7 +85,7 @@ class Company extends Model
      */
     public function users(): HasMany
     {
-        return $this->hasMany(User::class);
+        return $this->hasMany(User::class, 'company_uuid', 'uuid');
     }
 
     /**
@@ -81,7 +93,7 @@ class Company extends Model
      */
     public function employees(): HasMany
     {
-        return $this->hasMany(Employee::class);
+        return $this->hasMany(Employee::class, 'company_uuid', 'uuid');
     }
 
     /**
@@ -89,7 +101,7 @@ class Company extends Model
      */
     public function payrolls(): HasMany
     {
-        return $this->hasMany(Payroll::class);
+        return $this->hasMany(Payroll::class, 'company_uuid', 'uuid');
     }
 
     /**

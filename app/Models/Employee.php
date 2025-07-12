@@ -7,14 +7,20 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Str;
 
 class Employee extends Model
 {
     use HasFactory;
 
+    public $incrementing = false;
+    protected $keyType = 'string';
+    protected $primaryKey = 'uuid';
+
     protected $fillable = [
-        'company_id',
-        'user_id',
+        'uuid',
+        'company_uuid',
+        'user_uuid',
         'employee_id',
         'first_name',
         'last_name',
@@ -51,15 +57,22 @@ class Employee extends Model
 
         // Add global scope for company isolation
         static::addGlobalScope('company', function (Builder $builder) {
-            if (auth()->check() && auth()->user()->company_id) {
-                $builder->where('company_id', auth()->user()->company_id);
+            if (auth()->check() && auth()->user()->company_uuid) {
+                $builder->where('company_uuid', auth()->user()->company_uuid);
+            }
+        });
+
+        // Auto-generate UUID on creation
+        static::creating(function ($employee) {
+            if (empty($employee->uuid)) {
+                $employee->uuid = (string) Str::uuid();
             }
         });
 
         // Auto-generate employee ID if not provided
-        static::creating(function ($employee) {
-            if (empty($employee->employee_id) && $employee->company_id) {
-                $employee->employee_id = static::generateEmployeeId($employee->company_id);
+        static::updating(function ($employee) {
+            if (empty($employee->employee_id) && $employee->company_uuid) {
+                $employee->employee_id = static::generateEmployeeId($employee->company_uuid);
             }
         });
     }
@@ -69,7 +82,7 @@ class Employee extends Model
      */
     public function company(): BelongsTo
     {
-        return $this->belongsTo(Company::class);
+        return $this->belongsTo(Company::class, 'company_uuid', 'uuid');
     }
 
     /**
@@ -77,7 +90,7 @@ class Employee extends Model
      */
     public function user(): BelongsTo
     {
-        return $this->belongsTo(User::class);
+        return $this->belongsTo(User::class, 'user_uuid', 'uuid');
     }
 
     /**
@@ -85,7 +98,7 @@ class Employee extends Model
      */
     public function payrolls(): HasMany
     {
-        return $this->hasMany(Payroll::class);
+        return $this->hasMany(Payroll::class, 'employee_uuid', 'uuid');
     }
 
     /**
@@ -115,13 +128,13 @@ class Employee extends Model
     /**
      * Generate unique employee ID for company.
      */
-    protected static function generateEmployeeId(int $companyId): string
+    protected static function generateEmployeeId(string $companyUuid): string
     {
-        $company = Company::find($companyId);
+        $company = Company::where('uuid', $companyUuid)->first();
         $prefix = $company ? strtoupper(substr($company->slug, 0, 3)) : 'EMP';
         
         $lastEmployee = static::withoutGlobalScope('company')
-            ->where('company_id', $companyId)
+            ->where('company_uuid', $companyUuid)
             ->where('employee_id', 'like', $prefix . '%')
             ->orderBy('employee_id', 'desc')
             ->first();

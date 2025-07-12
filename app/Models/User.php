@@ -10,6 +10,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Tymon\JWTAuth\Contracts\JWTSubject;
 use App\Notifications\CustomVerifyEmail;
+use Illuminate\Support\Str;
 
 class User extends Authenticatable implements JWTSubject, MustVerifyEmail
 {
@@ -17,17 +18,24 @@ class User extends Authenticatable implements JWTSubject, MustVerifyEmail
     use HasFactory, Notifiable;
 
     /**
+     * Indicates if the model should use UUIDs.
+     */
+    public $incrementing = false;
+    protected $keyType = 'string';
+    protected $primaryKey = 'uuid';
+
+    /**
      * The attributes that are mass assignable.
      *
      * @var list<string>
      */
     protected $fillable = [
+        'uuid',
         'name',
         'email',
-        'company_id',
-        'default_company_id',
+        'company_uuid',
+        'default_company_uuid',
         'role',
-        'company', // Keep for backward compatibility during migration
         'password',
         'avatar',
     ];
@@ -53,6 +61,20 @@ class User extends Authenticatable implements JWTSubject, MustVerifyEmail
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+
+    /**
+     * Boot the model.
+     */
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::creating(function ($user) {
+            if (empty($user->uuid)) {
+                $user->uuid = Str::uuid();
+            }
+        });
     }
 
     /**
@@ -90,7 +112,7 @@ class User extends Authenticatable implements JWTSubject, MustVerifyEmail
      */
     public function settings(): HasMany
     {
-        return $this->hasMany(UserSettings::class);
+        return $this->hasMany(UserSettings::class, 'user_uuid', 'uuid');
     }
 
     /**
@@ -130,7 +152,7 @@ class User extends Authenticatable implements JWTSubject, MustVerifyEmail
      */
     public function ownedCompanies(): HasMany
     {
-        return $this->hasMany(Company::class, 'created_by');
+        return $this->hasMany(Company::class, 'created_by_uuid', 'uuid');
     }
 
     /**
@@ -138,7 +160,7 @@ class User extends Authenticatable implements JWTSubject, MustVerifyEmail
      */
     public function defaultCompany(): BelongsTo
     {
-        return $this->belongsTo(Company::class, 'default_company_id');
+        return $this->belongsTo(Company::class, 'default_company_uuid', 'uuid');
     }
 
     /**
@@ -146,7 +168,7 @@ class User extends Authenticatable implements JWTSubject, MustVerifyEmail
      */
     public function company(): \Illuminate\Database\Eloquent\Relations\BelongsTo
     {
-        return $this->belongsTo(Company::class);
+        return $this->belongsTo(Company::class, 'company_uuid', 'uuid');
     }
 
     /**
@@ -154,7 +176,7 @@ class User extends Authenticatable implements JWTSubject, MustVerifyEmail
      */
     public function employee(): \Illuminate\Database\Eloquent\Relations\HasOne
     {
-        return $this->hasOne(Employee::class);
+        return $this->hasOne(Employee::class, 'user_uuid', 'uuid');
     }
 
     /**
@@ -217,7 +239,7 @@ class User extends Authenticatable implements JWTSubject, MustVerifyEmail
         if ($this->isHoldingCompanyAdmin()) {
             // HCA users can access if any of their owned companies has active subscription
             return $this->ownedCompanies()->whereHas('users', function($query) {
-                $query->where('users.id', $this->id);
+                $query->where('users.uuid', $this->uuid);
             })->get()->some(function($company) {
                 return $company->hasActiveSubscription();
             }) || $this->hasActiveSubscription();

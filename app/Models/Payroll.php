@@ -6,14 +6,20 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Str;
 
 class Payroll extends Model
 {
     use HasFactory;
 
+    public $incrementing = false;
+    protected $keyType = 'string';
+    protected $primaryKey = 'uuid';
+
     protected $fillable = [
-        'company_id',
-        'employee_id',
+        'uuid',
+        'company_uuid',
+        'employee_uuid',
         'payroll_number',
         'period_start',
         'period_end',
@@ -59,8 +65,15 @@ class Payroll extends Model
 
         // Add global scope for company isolation
         static::addGlobalScope('company', function (Builder $builder) {
-            if (auth()->check() && auth()->user()->company_id) {
-                $builder->where('company_id', auth()->user()->company_id);
+            if (auth()->check() && auth()->user()->company_uuid) {
+                $builder->where('company_uuid', auth()->user()->company_uuid);
+            }
+        });
+
+        // Auto-generate UUID on creation
+        static::creating(function ($payroll) {
+            if (empty($payroll->uuid)) {
+                $payroll->uuid = (string) Str::uuid();
             }
         });
 
@@ -87,7 +100,7 @@ class Payroll extends Model
      */
     public function company(): BelongsTo
     {
-        return $this->belongsTo(Company::class);
+        return $this->belongsTo(Company::class, 'company_uuid', 'uuid');
     }
 
     /**
@@ -95,7 +108,7 @@ class Payroll extends Model
      */
     public function employee(): BelongsTo
     {
-        return $this->belongsTo(Employee::class);
+        return $this->belongsTo(Employee::class, 'employee_uuid', 'uuid');
     }
 
     /**
