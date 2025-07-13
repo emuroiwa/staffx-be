@@ -24,9 +24,13 @@ class EnsureCompanyContext
         }
 
         $user = auth()->user();
+               \Log::info('xxxxxxxxxxx', [
+               
+                'user_id' => $user,
+            ]);
 
         // Check if user has company context
-        if (!$user->company_id) {
+        if (!$user->company_uuid) {
             return response()->json([
                 'success' => false,
                 'message' => 'No company context. User must be associated with a company.',
@@ -50,7 +54,7 @@ class EnsureCompanyContext
         }
 
         // Set company context in the service container for easy access
-        app()->instance('current_company_id', $user->company_id);
+        app()->instance('current_company_uuid', $user->company_uuid);
         app()->instance('current_company', $user->company);
         app()->instance('current_user_role', $user->role);
 

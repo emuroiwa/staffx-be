@@ -1,7 +1,8 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\Api\Employee;
 
+use App\Http\Controllers\Controller;
 use App\Models\Department;
 use App\Services\DepartmentService;
 use App\Http\Resources\DepartmentResource;

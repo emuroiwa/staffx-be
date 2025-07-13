@@ -16,7 +16,12 @@ class PayrollController extends Controller
     public function index(Request $request): JsonResponse
     {
         try {
-            $query = Payroll::with(['employee']);
+            $user = auth()->user();
+            
+            // Only get payrolls for employees of the user's company
+            $query = Payroll::whereHas('employee', function ($q) use ($user) {
+                $q->where('company_uuid', $user->company_uuid);
+            })->with(['employee']);
 
             // Apply filters
             if ($request->has('employee_id') && $request->employee_id) {
@@ -72,9 +77,14 @@ class PayrollController extends Controller
         ]);
 
         try {
+            $user = auth()->user();
+            
             // Verify employee belongs to the same company
-            $employee = Employee::findOrFail($request->employee_id);
-            if ($employee->company_id !== auth()->user()->company_id) {
+            $employee = Employee::where('id', $request->employee_id)
+                ->where('company_uuid', $user->company_uuid)
+                ->first();
+                
+            if (!$employee) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Employee not found in your company',
@@ -82,7 +92,7 @@ class PayrollController extends Controller
             }
 
             $data = $request->validated();
-            $data['company_id'] = auth()->user()->company_id;
+            $data['company_uuid'] = $user->company_uuid;
 
             $payroll = Payroll::create($data);
             $payroll->load(['employee']);
@@ -108,6 +118,16 @@ class PayrollController extends Controller
     public function show(Payroll $payroll): JsonResponse
     {
         try {
+            $user = auth()->user();
+            
+            // Verify payroll belongs to user's company through employee
+            if (!$payroll->employee || $payroll->employee->company_uuid !== $user->company_uuid) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Payroll record not found or access denied.',
+                ], 404);
+            }
+            
             $payroll->load(['employee', 'company']);
 
             return response()->json([
@@ -129,6 +149,16 @@ class PayrollController extends Controller
      */
     public function update(Request $request, Payroll $payroll): JsonResponse
     {
+        $user = auth()->user();
+        
+        // Verify payroll belongs to user's company through employee
+        if (!$payroll->employee || $payroll->employee->company_uuid !== $user->company_uuid) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Payroll record not found or access denied.',
+            ], 404);
+        }
+        
         $request->validate([
             'pay_period_start' => 'sometimes|required|date',
             'pay_period_end' => 'sometimes|required|date|after:pay_period_start',
@@ -167,6 +197,16 @@ class PayrollController extends Controller
     public function destroy(Payroll $payroll): JsonResponse
     {
         try {
+            $user = auth()->user();
+            
+            // Verify payroll belongs to user's company through employee
+            if (!$payroll->employee || $payroll->employee->company_uuid !== $user->company_uuid) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Payroll record not found or access denied.',
+                ], 404);
+            }
+            
             $payroll->delete();
 
             return response()->json([
@@ -189,7 +229,12 @@ class PayrollController extends Controller
     public function summary(Request $request): JsonResponse
     {
         try {
-            $query = Payroll::query();
+            $user = auth()->user();
+            
+            // Only get payrolls for employees of the user's company
+            $query = Payroll::whereHas('employee', function ($q) use ($user) {
+                $q->where('company_uuid', $user->company_uuid);
+            });
 
             // Filter by date range if provided
             if ($request->has('start_date') && $request->start_date) {

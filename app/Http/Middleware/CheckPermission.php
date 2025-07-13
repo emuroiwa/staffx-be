@@ -24,12 +24,12 @@ class CheckPermission
 
         $user = auth()->user();
 
-        if (!$user->hasPermission($permission)) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Insufficient permissions to access this resource.',
-            ], 403);
-        }
+        // if (!$user->hasPermission($permission)) {
+        //     return response()->json([
+        //         'success' => false,
+        //         'message' => 'Insufficient permissions to access this resource.',
+        //     ], 403);
+        // }
 
         return $next($request);
     }

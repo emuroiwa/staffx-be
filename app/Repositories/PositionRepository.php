@@ -7,7 +7,7 @@ use App\Models\User;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Pagination\LengthAwarePaginator;
 
-class PositionRepository
+class PositionRepository extends BaseRepository
 {
     /**
      * Get paginated positions for company with filters.
@@ -15,6 +15,7 @@ class PositionRepository
     public function getPaginatedPositions(User $user, array $filters = [], int $perPage = 15): LengthAwarePaginator
     {
         $query = Position::query()
+            ->where('company_uuid', $user->company_uuid)
             ->with(['company', 'employees']);
 
         // Apply search filter
@@ -66,6 +67,7 @@ class PositionRepository
     public function getPositionById(string $id, User $user): ?Position
     {
         return Position::where('id', $id)
+            ->where('company_uuid', $user->company_uuid)
             ->with(['company', 'employees.department'])
             ->first();
     }
@@ -104,6 +106,7 @@ class PositionRepository
     public function getActivePositions(User $user): Collection
     {
         return Position::select(['id', 'name', 'min_salary', 'max_salary', 'currency'])
+            ->where('company_uuid', $user->company_uuid)
             ->where('is_active', true)
             ->orderBy('name')
             ->get();
@@ -114,12 +117,13 @@ class PositionRepository
      */
     public function getPositionStats(User $user): array
     {
-        $totalPositions = Position::count();
-        $activePositions = Position::where('is_active', true)->count();
-        $inactivePositions = Position::where('is_active', false)->count();
+        $totalPositions = Position::where('company_uuid', $user->company_uuid)->count();
+        $activePositions = Position::where('company_uuid', $user->company_uuid)->where('is_active', true)->count();
+        $inactivePositions = Position::where('company_uuid', $user->company_uuid)->where('is_active', false)->count();
 
         // Get positions with employee counts
-        $positionsWithEmployees = Position::withCount(['employees' => function ($query) {
+        $positionsWithEmployees = Position::where('company_uuid', $user->company_uuid)
+            ->withCount(['employees' => function ($query) {
                 $query->where('status', 'active');
             }])
             ->where('is_active', true)
@@ -128,7 +132,8 @@ class PositionRepository
             ->get(['id', 'name', 'employees_count']);
 
         // Get salary statistics
-        $salaryStats = Position::selectRaw('
+        $salaryStats = Position::where('company_uuid', $user->company_uuid)
+            ->selectRaw('
                 AVG(min_salary) as avg_min_salary,
                 AVG(max_salary) as avg_max_salary,
                 MIN(min_salary) as lowest_min_salary,
@@ -140,7 +145,8 @@ class PositionRepository
             ->first();
 
         // Get positions without employees (vacant)
-        $vacantPositions = Position::whereDoesntHave('employees', function ($query) {
+        $vacantPositions = Position::where('company_uuid', $user->company_uuid)
+            ->whereDoesntHave('employees', function ($query) {
                 $query->where('status', 'active');
             })
             ->where('is_active', true)
@@ -161,7 +167,8 @@ class PositionRepository
      */
     public function searchPositions(User $user, string $search, array $filters = []): Collection
     {
-        $query = Position::where(function ($q) use ($search) {
+        $query = Position::where('company_uuid', $user->company_uuid)
+            ->where(function ($q) use ($search) {
                 $q->where('name', 'like', '%' . $search . '%')
                   ->orWhere('description', 'like', '%' . $search . '%');
             });
@@ -183,7 +190,8 @@ class PositionRepository
      */
     public function getPositionsInSalaryRange(User $user, float $minSalary, float $maxSalary): Collection
     {
-        return Position::where('is_active', true)
+        return Position::where('company_uuid', $user->company_uuid)
+            ->where('is_active', true)
             ->where(function ($query) use ($minSalary, $maxSalary) {
                 $query->whereBetween('min_salary', [$minSalary, $maxSalary])
                       ->orWhereBetween('max_salary', [$minSalary, $maxSalary])
@@ -201,7 +209,9 @@ class PositionRepository
      */
     public function positionExistsForCompany(string $positionId, User $user): bool
     {
-        return Position::where('id', $positionId)->exists();
+        return Position::where('company_uuid', $user->company_uuid)
+            ->where('id', $positionId)
+            ->exists();
     }
 
     /**
@@ -209,7 +219,8 @@ class PositionRepository
      */
     public function getDeletablePositions(User $user): Collection
     {
-        return Position::whereDoesntHave('employees', function ($query) {
+        return Position::where('company_uuid', $user->company_uuid)
+            ->whereDoesntHave('employees', function ($query) {
                 $query->where('status', 'active');
             })
             ->get(['id', 'name', 'is_active']);
@@ -220,7 +231,9 @@ class PositionRepository
      */
     public function bulkUpdateStatus(array $positionIds, bool $isActive, User $user): int
     {
-        return Position::whereIn('id', $positionIds)->update(['is_active' => $isActive]);
+        return Position::where('company_uuid', $user->company_uuid)
+            ->whereIn('id', $positionIds)
+            ->update(['is_active' => $isActive]);
     }
 
     /**
@@ -228,7 +241,8 @@ class PositionRepository
      */
     public function getPositionsByRequirements(User $user, array $keywords): Collection
     {
-        $query = Position::where('is_active', true);
+        $query = Position::where('company_uuid', $user->company_uuid)
+            ->where('is_active', true);
 
         foreach ($keywords as $keyword) {
             $query->orWhereJsonContains('requirements', $keyword);
@@ -242,7 +256,8 @@ class PositionRepository
      */
     public function getPositionHierarchy(User $user): Collection
     {
-        return Position::where('is_active', true)
+        return Position::where('company_uuid', $user->company_uuid)
+            ->where('is_active', true)
             ->whereNotNull('min_salary')
             ->orderBy('min_salary', 'desc')
             ->with(['employees' => function ($query) {

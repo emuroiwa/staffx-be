@@ -3,9 +3,9 @@
 use App\Http\Controllers\Api\Auth\AuthController;
 use App\Http\Controllers\Api\UserDataController;
 use App\Http\Controllers\Api\UserSettingsController;
-use App\Http\Controllers\Api\EmployeeController;
-use App\Http\Controllers\Api\PositionController;
-use App\Http\Controllers\Api\DepartmentController;
+use App\Http\Controllers\Api\Employee\EmployeeController;
+use App\Http\Controllers\Api\Employee\PositionController;
+use App\Http\Controllers\Api\Employee\DepartmentController;
 use App\Http\Controllers\Api\PayrollController;
 use App\Http\Controllers\Api\CompanyController;
 use Illuminate\Http\Request;

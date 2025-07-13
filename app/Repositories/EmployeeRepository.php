@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 
-class EmployeeRepository
+class EmployeeRepository extends BaseRepository
 {
     /**
      * Get paginated employees for company with filters and relationships.
@@ -16,6 +16,7 @@ class EmployeeRepository
     public function getPaginatedEmployees(User $user, array $filters = [], int $perPage = 15): LengthAwarePaginator
     {
         $query = Employee::query()
+            ->where('company_uuid', $user->company_uuid)
             ->with(['department', 'position', 'manager', 'user', 'company']);
 
         // Apply search filter
@@ -89,6 +90,7 @@ class EmployeeRepository
     public function getEmployeeByUuid(string $uuid, User $user): ?Employee
     {
         return Employee::where('uuid', $uuid)
+            ->where('company_uuid', $user->company_uuid)
             ->with(['department', 'position', 'manager', 'directReports', 'user', 'company'])
             ->first();
     }
@@ -127,6 +129,7 @@ class EmployeeRepository
     public function getEmployeesForDropdown(User $user): Collection
     {
         return Employee::select(['uuid', 'first_name', 'last_name', 'employee_id', 'position_uuid'])
+            ->where('company_uuid', $user->company_uuid)
             ->with(['position:id,name'])
             ->where('status', 'active')
             ->orderBy('first_name')
@@ -140,6 +143,7 @@ class EmployeeRepository
     public function getPotentialManagers(User $user, ?Employee $employee = null): Collection
     {
         $query = Employee::select(['uuid', 'first_name', 'last_name', 'employee_id', 'position_uuid'])
+            ->where('company_uuid', $user->company_uuid)
             ->with(['position:id,name'])
             ->where('status', 'active');
 
@@ -178,13 +182,14 @@ class EmployeeRepository
      */
     public function getEmployeeStats(User $user): array
     {
-        $totalEmployees = Employee::count();
-        $activeEmployees = Employee::where('status', 'active')->count();
-        $inactiveEmployees = Employee::where('status', 'inactive')->count();
-        $terminatedEmployees = Employee::where('status', 'terminated')->count();
+        $totalEmployees = Employee::where('company_uuid', $user->company_uuid)->count();
+        $activeEmployees = Employee::where('company_uuid', $user->company_uuid)->where('status', 'active')->count();
+        $inactiveEmployees = Employee::where('company_uuid', $user->company_uuid)->where('status', 'inactive')->count();
+        $terminatedEmployees = Employee::where('company_uuid', $user->company_uuid)->where('status', 'terminated')->count();
 
         // Get department-wise count
         $departmentStats = Employee::selectRaw('department_uuid, count(*) as count')
+            ->where('company_uuid', $user->company_uuid)
             ->with(['department:id,name'])
             ->where('status', 'active')
             ->groupBy('department_uuid')
@@ -198,18 +203,21 @@ class EmployeeRepository
 
         // Get employment type distribution
         $employmentTypeStats = Employee::selectRaw('employment_type, count(*) as count')
+            ->where('company_uuid', $user->company_uuid)
             ->where('status', 'active')
             ->groupBy('employment_type')
             ->get()
             ->pluck('count', 'employment_type');
 
         // Get recent hires (last 30 days)
-        $recentHires = Employee::where('hire_date', '>=', now()->subDays(30))
+        $recentHires = Employee::where('company_uuid', $user->company_uuid)
+            ->where('hire_date', '>=', now()->subDays(30))
             ->where('status', 'active')
             ->count();
 
         // Get upcoming work anniversaries (next 30 days)
-        $upcomingAnniversaries = Employee::whereRaw('DATE_FORMAT(hire_date, "%m-%d") BETWEEN ? AND ?', [
+        $upcomingAnniversaries = Employee::where('company_uuid', $user->company_uuid)
+            ->whereRaw('DATE_FORMAT(hire_date, "%m-%d") BETWEEN ? AND ?', [
                 now()->format('m-d'),
                 now()->addDays(30)->format('m-d')
             ])
@@ -233,7 +241,8 @@ class EmployeeRepository
      */
     public function searchEmployees(User $user, string $search, array $filters = []): Collection
     {
-        $query = Employee::where(function ($q) use ($search) {
+        $query = Employee::where('company_uuid', $user->company_uuid)
+            ->where(function ($q) use ($search) {
                 $q->where('first_name', 'like', '%' . $search . '%')
                   ->orWhere('last_name', 'like', '%' . $search . '%')
                   ->orWhere('email', 'like', '%' . $search . '%')
@@ -262,7 +271,8 @@ class EmployeeRepository
      */
     public function getOrganogramData(User $user): Collection
     {
-        return Employee::with(['department:id,name', 'position:id,name', 'directReports.department', 'directReports.position'])
+        return Employee::where('company_uuid', $user->company_uuid)
+            ->with(['department:id,name', 'position:id,name', 'directReports.department', 'directReports.position'])
             ->whereNull('manager_uuid') // Start with top-level employees
             ->where('status', 'active')
             ->get();
@@ -273,7 +283,8 @@ class EmployeeRepository
      */
     public function getEmployeesByDepartment(string $departmentUuid, User $user): Collection
     {
-        return Employee::where('department_uuid', $departmentUuid)
+        return Employee::where('company_uuid', $user->company_uuid)
+            ->where('department_uuid', $departmentUuid)
             ->with(['position:id,name', 'manager:uuid,first_name,last_name'])
             ->where('status', 'active')
             ->orderBy('first_name')
@@ -286,7 +297,8 @@ class EmployeeRepository
      */
     public function getEmployeesByPosition(string $positionUuid, User $user): Collection
     {
-        return Employee::where('position_uuid', $positionUuid)
+        return Employee::where('company_uuid', $user->company_uuid)
+            ->where('position_uuid', $positionUuid)
             ->with(['department:id,name', 'manager:uuid,first_name,last_name'])
             ->where('status', 'active')
             ->orderBy('first_name')
@@ -299,7 +311,8 @@ class EmployeeRepository
      */
     public function getDirectReports(string $managerUuid, User $user): Collection
     {
-        return Employee::where('manager_uuid', $managerUuid)
+        return Employee::where('company_uuid', $user->company_uuid)
+            ->where('manager_uuid', $managerUuid)
             ->with(['department:id,name', 'position:id,name'])
             ->where('status', 'active')
             ->orderBy('first_name')
@@ -312,7 +325,9 @@ class EmployeeRepository
      */
     public function bulkUpdateStatus(array $employeeUuids, string $status, User $user): int
     {
-        return Employee::whereIn('uuid', $employeeUuids)->update(['status' => $status]);
+        return Employee::where('company_uuid', $user->company_uuid)
+            ->whereIn('uuid', $employeeUuids)
+            ->update(['status' => $status]);
     }
 
     /**
@@ -320,7 +335,8 @@ class EmployeeRepository
      */
     public function getUpcomingBirthdays(User $user): Collection
     {
-        return Employee::whereRaw('DATE_FORMAT(dob, "%m-%d") BETWEEN ? AND ?', [
+        return Employee::where('company_uuid', $user->company_uuid)
+            ->whereRaw('DATE_FORMAT(dob, "%m-%d") BETWEEN ? AND ?', [
                 now()->format('m-d'),
                 now()->addDays(30)->format('m-d')
             ])
@@ -336,7 +352,8 @@ class EmployeeRepository
      */
     public function getUpcomingAnniversaries(User $user): Collection
     {
-        return Employee::whereRaw('DATE_FORMAT(hire_date, "%m-%d") BETWEEN ? AND ?', [
+        return Employee::where('company_uuid', $user->company_uuid)
+            ->whereRaw('DATE_FORMAT(hire_date, "%m-%d") BETWEEN ? AND ?', [
                 now()->format('m-d'),
                 now()->addDays(30)->format('m-d')
             ])
@@ -352,6 +369,8 @@ class EmployeeRepository
      */
     public function employeeExistsForCompany(string $employeeUuid, User $user): bool
     {
-        return Employee::where('uuid', $employeeUuid)->exists();
+        return Employee::where('company_uuid', $user->company_uuid)
+            ->where('uuid', $employeeUuid)
+            ->exists();
     }
 }

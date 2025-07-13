@@ -7,7 +7,7 @@ use App\Models\User;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Pagination\LengthAwarePaginator;
 
-class DepartmentRepository
+class DepartmentRepository extends BaseRepository
 {
     /**
      * Get paginated departments for company with filters.
@@ -15,6 +15,7 @@ class DepartmentRepository
     public function getPaginatedDepartments(User $user, array $filters = [], int $perPage = 15): LengthAwarePaginator
     {
         $query = Department::query()
+            ->where('company_uuid', $user->company_uuid)
             ->with(['company', 'employees', 'head']);
 
         // Apply search filter
@@ -54,6 +55,7 @@ class DepartmentRepository
     public function getDepartmentById(string $id, User $user): ?Department
     {
         return Department::where('id', $id)
+            ->where('company_uuid', $user->company_uuid)
             ->with(['company', 'employees.position', 'head'])
             ->first();
     }
@@ -90,6 +92,7 @@ class DepartmentRepository
     public function getActiveDepartments(User $user): Collection
     {
         return Department::select(['id', 'name', 'cost_center'])
+            ->where('company_uuid', $user->company_uuid)
             ->where('is_active', true)
             ->orderBy('name')
             ->get();
@@ -100,12 +103,13 @@ class DepartmentRepository
      */
     public function getDepartmentStats(User $user): array
     {
-        $totalDepartments = Department::count();
-        $activeDepartments = Department::where('is_active', true)->count();
-        $departmentsWithHeads = Department::whereNotNull('head_of_department_id')->count();
+        $totalDepartments = Department::where('company_uuid', $user->company_uuid)->count();
+        $activeDepartments = Department::where('company_uuid', $user->company_uuid)->where('is_active', true)->count();
+        $departmentsWithHeads = Department::where('company_uuid', $user->company_uuid)->whereNotNull('head_of_department_id')->count();
 
         // Get departments with employee counts
-        $departmentsWithEmployees = Department::withCount(['employees' => function ($query) {
+        $departmentsWithEmployees = Department::where('company_uuid', $user->company_uuid)
+            ->withCount(['employees' => function ($query) {
                 $query->where('status', 'active');
             }])
             ->where('is_active', true)
@@ -125,7 +129,8 @@ class DepartmentRepository
      */
     public function searchDepartments(User $user, string $search, array $filters = []): Collection
     {
-        $query = Department::where(function ($q) use ($search) {
+        $query = Department::where('company_uuid', $user->company_uuid)
+            ->where(function ($q) use ($search) {
                 $q->where('name', 'like', '%' . $search . '%')
                   ->orWhere('description', 'like', '%' . $search . '%');
             });
@@ -142,6 +147,8 @@ class DepartmentRepository
      */
     public function bulkUpdateStatus(array $departmentIds, bool $isActive, User $user): int
     {
-        return Department::whereIn('id', $departmentIds)->update(['is_active' => $isActive]);
+        return Department::where('company_uuid', $user->company_uuid)
+            ->whereIn('id', $departmentIds)
+            ->update(['is_active' => $isActive]);
     }
 }
