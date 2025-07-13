@@ -114,7 +114,7 @@ class EmployeeManagementTest extends TestCase
             'status' => 'active',
             'employment_type' => 'full_time',
             'salary' => 80000,
-            'currency' => 'USD',
+            'currency_uuid' => $this->testCurrency->uuid,
             'tax_number' => 'TAX999',
             'pay_frequency' => 'monthly',
             'national_id' => 'ID999',

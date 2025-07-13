@@ -7,6 +7,7 @@ use App\Models\Company;
 use App\Models\Employee;
 use App\Models\Position;
 use App\Models\Department;
+use App\Models\Currency;
 use Illuminate\Support\Facades\Hash;
 
 trait EmployeeTestTrait
@@ -15,6 +16,7 @@ trait EmployeeTestTrait
     protected $testUser;
     protected $testPosition;
     protected $testDepartment;
+    protected $testCurrency;
     protected $authToken;
 
     protected function setupTestEnvironment(): void
@@ -47,6 +49,16 @@ trait EmployeeTestTrait
 
         $this->authToken = $response->json('data.token');
         
+        // Create test currency
+        $this->testCurrency = Currency::create([
+            'uuid' => \Str::uuid(),
+            'code' => 'USD',
+            'name' => 'US Dollar',
+            'symbol' => '$',
+            'exchange_rate' => 1.000000,
+            'is_active' => true,
+        ]);
+        
         // Create test position
         $this->testPosition = Position::create([
             'id' => \Str::uuid(),
@@ -55,7 +67,7 @@ trait EmployeeTestTrait
             'description' => 'Senior software engineer position',
             'min_salary' => 50000,
             'max_salary' => 100000,
-            'currency' => 'USD',
+            'currency_uuid' => $this->testCurrency->uuid,
             'is_active' => true,
             'requirements' => [
                 'education' => 'Bachelor\'s degree in Computer Science',
@@ -107,7 +119,7 @@ trait EmployeeTestTrait
             'status' => 'active',
             'employment_type' => 'full_time',
             'salary' => 75000,
-            'currency' => 'USD',
+            'currency_uuid' => $this->testCurrency->uuid,
             'tax_number' => 'TAX123456789',
             'pay_frequency' => 'monthly',
             'national_id' => 'ID123456789',
@@ -195,6 +207,7 @@ trait EmployeeTestTrait
             'employment_type',
             'salary',
             'formatted_salary',
+            'currency_uuid',
             'currency',
             'tax_number',
             'pay_frequency',
@@ -225,7 +238,7 @@ trait EmployeeTestTrait
             'min_salary',
             'max_salary',
             'salary_range',
-            'currency',
+            'currency_uuid',
             'is_active',
             'created_at',
             'updated_at'
@@ -250,6 +263,9 @@ trait EmployeeTestTrait
         Employee::where('company_uuid', $this->testCompany->uuid)->delete();
         Position::where('company_uuid', $this->testCompany->uuid)->delete();
         Department::where('company_uuid', $this->testCompany->uuid)->delete();
+        if ($this->testCurrency) {
+            $this->testCurrency->delete();
+        }
         $this->testUser->delete();
         $this->testCompany->delete();
     }

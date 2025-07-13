@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\Employee\PositionController;
 use App\Http\Controllers\Api\Employee\DepartmentController;
 use App\Http\Controllers\Api\PayrollController;
 use App\Http\Controllers\Api\CompanyController;
+use App\Http\Controllers\Api\CurrencyController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\DB;
@@ -121,7 +122,7 @@ Route::middleware(['auth:api', 'company.context'])->group(function () {
         Route::post('/', [EmployeeController::class, 'store'])
             ->middleware('permission:manage_employees');
         
-        Route::get('/statistics', [EmployeeController::class, 'statistics'])
+        Route::get('/statistics', [EmployeeController::class, 'stats'])
             ->middleware('permission:view_reports');
         
         Route::get('/organogram', [EmployeeController::class, 'organogram'])
@@ -183,6 +184,20 @@ Route::middleware(['auth:api', 'company.context'])->group(function () {
         
         Route::delete('/{department}', [DepartmentController::class, 'destroy'])
             ->middleware('permission:manage_employees');
+    });
+    
+    // Currency routes
+    Route::prefix('currencies')->group(function () {
+        Route::get('/', [CurrencyController::class, 'index']);
+        Route::get('/exchange-rates', [CurrencyController::class, 'exchangeRates']);
+        Route::get('/{currency}', [CurrencyController::class, 'show'])
+            ->middleware('permission:manage_settings');
+        Route::post('/', [CurrencyController::class, 'store'])
+            ->middleware('permission:manage_settings');
+        Route::put('/{currency}', [CurrencyController::class, 'update'])
+            ->middleware('permission:manage_settings');
+        Route::delete('/{currency}', [CurrencyController::class, 'destroy'])
+            ->middleware('permission:manage_settings');
     });
 });
 

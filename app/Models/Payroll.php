@@ -33,7 +33,7 @@ class Payroll extends Model
         'deductions',
         'total_deductions',
         'net_salary',
-        'currency',
+        'currency_uuid',
         'status',
         'pay_date',
         'payment_method',
@@ -112,6 +112,14 @@ class Payroll extends Model
     }
 
     /**
+     * Get the currency for this payroll.
+     */
+    public function currency(): BelongsTo
+    {
+        return $this->belongsTo(Currency::class, 'currency_uuid', 'uuid');
+    }
+
+    /**
      * Check if payroll is processed.
      */
     public function isProcessed(): bool
@@ -132,7 +140,8 @@ class Payroll extends Model
      */
     public function getFormattedGrossSalaryAttribute(): string
     {
-        return number_format($this->gross_salary, 2) . ' ' . $this->currency;
+        $symbol = $this->currency ? $this->currency->symbol : '$';
+        return $symbol . number_format($this->gross_salary, 2);
     }
 
     /**
@@ -140,7 +149,8 @@ class Payroll extends Model
      */
     public function getFormattedNetSalaryAttribute(): string
     {
-        return number_format($this->net_salary, 2) . ' ' . $this->currency;
+        $symbol = $this->currency ? $this->currency->symbol : '$';
+        return $symbol . number_format($this->net_salary, 2);
     }
 
     /**

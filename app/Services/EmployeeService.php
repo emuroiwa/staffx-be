@@ -55,7 +55,7 @@ class EmployeeService
 
             DB::commit();
             
-            return $employee->load(['department', 'position', 'manager', 'user']);
+            return $employee->load(['department', 'position', 'manager', 'user', 'currency']);
             
         } catch (\Exception $e) {
             DB::rollBack();

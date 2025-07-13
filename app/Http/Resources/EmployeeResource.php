@@ -28,7 +28,16 @@ class EmployeeResource extends JsonResource
             'start_date' => $this->start_date?->format('Y-m-d'),
             'salary' => $this->salary,
             'formatted_salary' => $this->formatted_salary,
-            'currency' => $this->currency,
+            'currency_uuid' => $this->currency_uuid,
+            'currency' => $this->whenLoaded('currency', function () {
+                return [
+                    'uuid' => $this->currency->uuid,
+                    'code' => $this->currency->code,
+                    'name' => $this->currency->name,
+                    'symbol' => $this->currency->symbol,
+                    'display_name' => $this->currency->display_name,
+                ];
+            }),
             'is_director' => $this->is_director,
             'is_independent_contractor' => $this->is_independent_contractor,
             'is_uif_exempt' => $this->is_uif_exempt,

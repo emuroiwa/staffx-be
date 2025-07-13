@@ -79,7 +79,12 @@ class UpdateEmployeeRequest extends FormRequest
             'is_uif_exempt' => ['sometimes', 'boolean'],
             
             'salary' => ['sometimes', 'nullable', 'numeric', 'min:0'],
-            'currency' => ['sometimes', 'nullable', 'string', 'size:3'],
+            'currency_uuid' => [
+                'sometimes',
+                'nullable',
+                'uuid',
+                Rule::exists('currencies', 'uuid')->where('is_active', true)
+            ],
             'tax_number' => ['sometimes', 'nullable', 'string', 'max:50'],
             'pay_frequency' => ['sometimes', 'required', Rule::in(['weekly', 'bi_weekly', 'monthly', 'quarterly', 'annually'])],
             

@@ -31,7 +31,17 @@ class EmployeeDetailResource extends JsonResource
             'employment_type' => $this->employment_type,
             'salary' => $this->salary,
             'formatted_salary' => $this->formatted_salary,
-            'currency' => $this->currency,
+            'currency_uuid' => $this->currency_uuid,
+            'currency' => $this->whenLoaded('currency', function () {
+                return [
+                    'uuid' => $this->currency->uuid,
+                    'code' => $this->currency->code,
+                    'name' => $this->currency->name,
+                    'symbol' => $this->currency->symbol,
+                    'display_name' => $this->currency->display_name,
+                    'exchange_rate' => $this->currency->exchange_rate,
+                ];
+            }),
             'tax_number' => $this->tax_number,
             'pay_frequency' => $this->pay_frequency,
             'national_id' => $this->national_id,
