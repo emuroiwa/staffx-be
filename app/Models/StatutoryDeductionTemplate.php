@@ -125,6 +125,11 @@ class StatutoryDeductionTemplate extends Model
         $totalTax = 0;
         $details = [];
 
+        // Validate brackets data
+        if (!is_array($brackets)) {
+            throw new \InvalidArgumentException("Invalid brackets data: expected array, got " . gettype($brackets));
+        }
+
         // Sort brackets by min value to ensure proper order
         usort($brackets, function($a, $b) {
             return $a['min'] <=> $b['min'];
@@ -191,6 +196,12 @@ class StatutoryDeductionTemplate extends Model
     private function calculateSalaryBracketDeduction(float $salary): array
     {
         $brackets = $this->rules['brackets'] ?? [];
+        
+        // Validate brackets data
+        if (!is_array($brackets)) {
+            throw new \InvalidArgumentException("Invalid brackets data: expected array, got " . gettype($brackets));
+        }
+        
         $deductionAmount = 0;
 
         foreach ($brackets as $bracket) {

@@ -261,4 +261,9 @@ class EmployeePayrollItem extends Model
     {
         return $query->where('status', 'pending_approval');
     }
+
+    public function scopeForEmployee($query, string $employeeUuid)
+    {
+        return $query->where('employee_uuid', $employeeUuid);
+    }
 }

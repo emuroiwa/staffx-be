@@ -22,6 +22,7 @@ class Company extends Model
     protected $fillable = [
         'uuid',
         'created_by_uuid',
+        'country_uuid',
         'name',
         'slug',
         'domain',
@@ -78,6 +79,14 @@ class Company extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by_uuid', 'uuid');
+    }
+
+    /**
+     * Get the country this company operates in.
+     */
+    public function country(): BelongsTo
+    {
+        return $this->belongsTo(Country::class, 'country_uuid', 'uuid');
     }
 
     /**

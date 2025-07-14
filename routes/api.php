@@ -6,7 +6,9 @@ use App\Http\Controllers\Api\UserSettingsController;
 use App\Http\Controllers\Api\Employee\EmployeeController;
 use App\Http\Controllers\Api\Employee\PositionController;
 use App\Http\Controllers\Api\Employee\DepartmentController;
-use App\Http\Controllers\Api\PayrollController;
+use App\Http\Controllers\PayrollController;
+use App\Http\Controllers\CompanyPayrollTemplateController;
+use App\Http\Controllers\EmployeePayrollItemController;
 use App\Http\Controllers\Api\CompanyController;
 use App\Http\Controllers\Api\CurrencyController;
 use Illuminate\Http\Request;
@@ -202,24 +204,88 @@ Route::middleware(['auth:api', 'company.context'])->group(function () {
 });
 
 // Payroll management routes (company-scoped)
-Route::middleware(['auth:api', 'company.context'])->prefix('payrolls')->group(function () {
-    Route::get('/', [PayrollController::class, 'index'])
-        ->middleware('permission:manage_payroll');
+Route::middleware(['auth:api', 'company.context'])->group(function () {
     
-    Route::post('/', [PayrollController::class, 'store'])
-        ->middleware('permission:manage_payroll');
+    // Payroll routes
+    Route::prefix('payrolls')->group(function () {
+        Route::get('/', [PayrollController::class, 'index'])
+            ->middleware('permission:manage_payroll');
+        
+        Route::post('/', [PayrollController::class, 'store'])
+            ->middleware('permission:manage_payroll');
+        
+        Route::post('/preview', [PayrollController::class, 'preview'])
+            ->middleware('permission:manage_payroll');
+        
+        Route::get('/statistics', [PayrollController::class, 'statistics'])
+            ->middleware('permission:view_reports');
+        
+        Route::get('/{payroll}', [PayrollController::class, 'show'])
+            ->middleware('permission:manage_payroll');
+        
+        Route::put('/{payroll}', [PayrollController::class, 'update'])
+            ->middleware('permission:manage_payroll');
+        
+        Route::delete('/{payroll}', [PayrollController::class, 'destroy'])
+            ->middleware('permission:manage_payroll');
+        
+        Route::post('/{payroll}/approve', [PayrollController::class, 'approve'])
+            ->middleware('permission:approve_payroll');
+        
+        Route::post('/{payroll}/process', [PayrollController::class, 'process'])
+            ->middleware('permission:process_payroll');
+    });
     
-    Route::get('/summary', [PayrollController::class, 'summary'])
-        ->middleware('permission:view_reports');
+    // Company Payroll Template routes
+    Route::prefix('payroll-templates')->group(function () {
+        Route::get('/', [CompanyPayrollTemplateController::class, 'index'])
+            ->middleware('permission:manage_payroll');
+        
+        Route::post('/', [CompanyPayrollTemplateController::class, 'store'])
+            ->middleware('permission:manage_payroll');
+        
+        Route::get('/{template}', [CompanyPayrollTemplateController::class, 'show'])
+            ->middleware('permission:manage_payroll');
+        
+        Route::put('/{template}', [CompanyPayrollTemplateController::class, 'update'])
+            ->middleware('permission:manage_payroll');
+        
+        Route::delete('/{template}', [CompanyPayrollTemplateController::class, 'destroy'])
+            ->middleware('permission:manage_payroll');
+        
+        Route::post('/{template}/toggle-status', [CompanyPayrollTemplateController::class, 'toggleStatus'])
+            ->middleware('permission:manage_payroll');
+        
+        Route::post('/{template}/test-calculation', [CompanyPayrollTemplateController::class, 'testCalculation'])
+            ->middleware('permission:manage_payroll');
+    });
     
-    Route::get('/{payroll}', [PayrollController::class, 'show'])
-        ->middleware('permission:manage_payroll');
-    
-    Route::put('/{payroll}', [PayrollController::class, 'update'])
-        ->middleware('permission:manage_payroll');
-    
-    Route::delete('/{payroll}', [PayrollController::class, 'destroy'])
-        ->middleware('permission:manage_payroll');
+    // Employee Payroll Item routes
+    Route::prefix('employee-payroll-items')->group(function () {
+        Route::get('/', [EmployeePayrollItemController::class, 'index'])
+            ->middleware('permission:manage_payroll');
+        
+        Route::post('/', [EmployeePayrollItemController::class, 'store'])
+            ->middleware('permission:manage_payroll');
+        
+        Route::get('/{item}', [EmployeePayrollItemController::class, 'show'])
+            ->middleware('permission:manage_payroll');
+        
+        Route::put('/{item}', [EmployeePayrollItemController::class, 'update'])
+            ->middleware('permission:manage_payroll');
+        
+        Route::delete('/{item}', [EmployeePayrollItemController::class, 'destroy'])
+            ->middleware('permission:manage_payroll');
+        
+        Route::post('/{item}/approve', [EmployeePayrollItemController::class, 'approve'])
+            ->middleware('permission:approve_payroll');
+        
+        Route::post('/{item}/suspend', [EmployeePayrollItemController::class, 'suspend'])
+            ->middleware('permission:manage_payroll');
+        
+        Route::post('/{item}/calculate-preview', [EmployeePayrollItemController::class, 'calculatePreview'])
+            ->middleware('permission:manage_payroll');
+    });
 });
 
 // Company management routes

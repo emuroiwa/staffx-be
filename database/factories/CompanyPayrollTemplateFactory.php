@@ -19,6 +19,7 @@ class CompanyPayrollTemplateFactory extends Factory
             'code' => strtoupper($this->faker->unique()->bothify('???###')),
             'name' => $this->faker->words(3, true),
             'description' => $this->faker->sentence(),
+            'type' => $this->faker->randomElement(['allowance', 'deduction']),
             'calculation_method' => $this->faker->randomElement([
                 'fixed_amount', 
                 'percentage_of_salary', 
@@ -26,6 +27,7 @@ class CompanyPayrollTemplateFactory extends Factory
                 'formula', 
                 'manual'
             ]),
+            'amount' => $this->faker->randomFloat(2, 500, 5000),
             'default_amount' => null,
             'default_percentage' => null,
             'formula_expression' => null,
@@ -160,6 +162,24 @@ class CompanyPayrollTemplateFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'is_pensionable' => false,
+        ]);
+    }
+
+    public function allowance(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'type' => 'allowance',
+            'calculation_method' => 'fixed_amount',
+            'amount' => $this->faker->randomFloat(2, 1000, 5000),
+        ]);
+    }
+
+    public function deduction(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'type' => 'deduction',
+            'calculation_method' => 'fixed_amount',
+            'amount' => $this->faker->randomFloat(2, 500, 2000),
         ]);
     }
 }

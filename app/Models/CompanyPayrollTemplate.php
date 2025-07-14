@@ -24,7 +24,9 @@ class CompanyPayrollTemplate extends Model
         'code',
         'name',
         'description',
+        'type',
         'calculation_method',
+        'amount',
         'default_amount',
         'default_percentage',
         'formula_expression',
@@ -38,6 +40,7 @@ class CompanyPayrollTemplate extends Model
     ];
 
     protected $casts = [
+        'amount' => 'decimal:2',
         'default_amount' => 'decimal:2',
         'default_percentage' => 'decimal:2', 
         'minimum_amount' => 'decimal:2',
@@ -84,7 +87,7 @@ class CompanyPayrollTemplate extends Model
     public function calculateAmount(Employee $employee, float $baseSalary): float
     {
         return match($this->calculation_method) {
-            'fixed_amount' => $this->default_amount ?? 0,
+            'fixed_amount' => $this->amount ?? $this->default_amount ?? 0,
             'percentage_of_salary' => ($baseSalary * ($this->default_percentage / 100)),
             'percentage_of_basic' => ($employee->salary * ($this->default_percentage / 100)),
             'formula' => $this->evaluateFormula($employee, $baseSalary),
@@ -185,5 +188,42 @@ class CompanyPayrollTemplate extends Model
             $q->where('is_active', true);
             // Additional filtering logic can be added here
         });
+    }
+
+    public function scopeForCompany($query, string $companyUuid)
+    {
+        return $query->where('company_uuid', $companyUuid);
+    }
+
+    public function scopeEffectiveForDate($query, $date)
+    {
+        return $query->where('is_active', true);
+    }
+
+    /**
+     * Calculate for employee considering all factors.
+     */
+    public function calculateForEmployee(Employee $employee, $date = null): array
+    {
+        if (!$this->isApplicableToEmployee($employee)) {
+            return ['amount' => 0];
+        }
+
+        $amount = $this->calculateAmount($employee, $employee->salary);
+        
+        // Apply min/max constraints
+        if ($this->minimum_amount && $amount < $this->minimum_amount) {
+            $amount = $this->minimum_amount;
+        }
+        
+        if ($this->maximum_amount && $amount > $this->maximum_amount) {
+            $amount = $this->maximum_amount;
+        }
+
+        return [
+            'amount' => round($amount, 2),
+            'calculation_method' => $this->calculation_method,
+            'base_value' => $employee->salary
+        ];
     }
 }

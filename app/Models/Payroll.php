@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Str;
 
@@ -21,8 +22,15 @@ class Payroll extends Model
         'company_uuid',
         'employee_uuid',
         'payroll_number',
+        'payroll_period_start',
+        'payroll_period_end',
         'period_start',
         'period_end',
+        'total_employees',
+        'total_gross_salary',
+        'total_net_salary',
+        'total_deductions',
+        'total_employer_contributions',
         'base_salary',
         'overtime_hours',
         'overtime_rate',
@@ -31,19 +39,33 @@ class Payroll extends Model
         'allowances',
         'gross_salary',
         'deductions',
-        'total_deductions',
         'net_salary',
         'currency_uuid',
         'status',
         'pay_date',
         'payment_method',
         'notes',
+        'calculated_at',
+        'approved_at',
+        'approved_by',
+        'processed_at',
+        'created_by'
     ];
 
     protected $casts = [
         'period_start' => 'date',
         'period_end' => 'date',
+        'payroll_period_start' => 'date',
+        'payroll_period_end' => 'date',
         'pay_date' => 'date',
+        'calculated_at' => 'datetime',
+        'approved_at' => 'datetime',
+        'processed_at' => 'datetime',
+        'total_employees' => 'integer',
+        'total_gross_salary' => 'decimal:2',
+        'total_net_salary' => 'decimal:2',
+        'total_deductions' => 'decimal:2',
+        'total_employer_contributions' => 'decimal:2',
         'base_salary' => 'decimal:2',
         'overtime_hours' => 'decimal:2',
         'overtime_rate' => 'decimal:2',
@@ -51,7 +73,6 @@ class Payroll extends Model
         'bonus' => 'decimal:2',
         'allowances' => 'decimal:2',
         'gross_salary' => 'decimal:2',
-        'total_deductions' => 'decimal:2',
         'net_salary' => 'decimal:2',
         'deductions' => 'array',
     ];
@@ -117,6 +138,14 @@ class Payroll extends Model
     public function currency(): BelongsTo
     {
         return $this->belongsTo(Currency::class, 'currency_uuid', 'uuid');
+    }
+
+    /**
+     * Get the payroll items for this payroll.
+     */
+    public function payrollItems(): HasMany
+    {
+        return $this->hasMany(PayrollItem::class, 'payroll_uuid', 'uuid');
     }
 
     /**
