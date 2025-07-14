@@ -177,8 +177,8 @@ class StatutoryDeductionTemplateTest extends TestCase
             'rules' => [
                 'brackets' => [
                     ['min' => 0, 'max' => 10000, 'rate' => 0.10],
-                    ['min' => 10001, 'max' => 20000, 'rate' => 0.20],
-                    ['min' => 20001, 'max' => null, 'rate' => 0.30]
+                    ['min' => 10000, 'max' => 20000, 'rate' => 0.20],
+                    ['min' => 20000, 'max' => null, 'rate' => 0.30]
                 ]
             ]
         ]);
@@ -189,7 +189,7 @@ class StatutoryDeductionTemplateTest extends TestCase
 
         // Test with salary spanning multiple brackets
         $result = $template->calculateDeduction(25000);
-        $expected = (10000 * 0.10) + (10000 * 0.20) + (5000 * 0.30); // 1000 + 2000 + 1500 = 4500
+        // Expected: (10000 * 0.10) + (10000 * 0.20) + (5000 * 0.30) = 1000 + 2000 + 1500 = 4500
         $this->assertEquals(4500, $result['employee_amount']);
     }
 

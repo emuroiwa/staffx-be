@@ -5,12 +5,19 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use App\Traits\HasUuid;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
+use Exception;
 
 class EmployeePayrollItem extends Model
 {
-    use HasUuid;
+    use HasFactory;
+
+    public $incrementing = false;
+    protected $keyType = 'string';
+    protected $primaryKey = 'uuid';
 
     protected $fillable = [
         'employee_uuid',
@@ -41,6 +48,21 @@ class EmployeePayrollItem extends Model
         'approved_at' => 'datetime'
     ];
 
+    /**
+     * Boot the model.
+     */
+    protected static function boot()
+    {
+        parent::boot();
+
+        // Auto-generate UUID on creation
+        static::creating(function ($item) {
+            if (empty($item->uuid)) {
+                $item->uuid = (string) Str::uuid();
+            }
+        });
+    }
+
     // Relationships
     public function employee(): BelongsTo
     {
@@ -62,15 +84,16 @@ class EmployeePayrollItem extends Model
         return $this->belongsTo(User::class, 'approved_by', 'uuid');
     }
 
-    public function history(): HasMany
-    {
-        return $this->hasMany(PayrollItemHistory::class, 'employee_payroll_item_uuid', 'uuid');
-    }
+    // Note: PayrollItemHistory and PayrollItem models would be created separately
+    // public function history(): HasMany
+    // {
+    //     return $this->hasMany(PayrollItemHistory::class, 'employee_payroll_item_uuid', 'uuid');
+    // }
 
-    public function payrollItems(): HasMany
-    {
-        return $this->hasMany(PayrollItem::class, 'employee_payroll_item_uuid', 'uuid');
-    }
+    // public function payrollItems(): HasMany
+    // {
+    //     return $this->hasMany(PayrollItem::class, 'employee_payroll_item_uuid', 'uuid');
+    // }
 
     // Business Logic Methods
     public function calculateAmount(float $baseSalary, Carbon $payrollDate = null): float
@@ -163,23 +186,38 @@ class EmployeePayrollItem extends Model
     {
         $expression = $this->formula_expression;
         
-        // Replace variables
-        $expression = str_replace('{basic_salary}', $this->employee->salary, $expression);
-        $expression = str_replace('{gross_salary}', $baseSalary, $expression);
-        $expression = str_replace('{years_of_service}', $this->employee->years_of_service ?? 0, $expression);
+        // Replace variables with actual values
+        $basicSalary = $this->employee->salary ?? 0;
+        // Calculate years of service from hire_date
+        $yearsOfService = $this->employee->hire_date ? now()->diffInYears($this->employee->hire_date) : 0;
         
+        $expression = str_replace('{basic_salary}', $basicSalary, $expression);
+        $expression = str_replace('{gross_salary}', $baseSalary, $expression);
+        $expression = str_replace('{years_of_service}', $yearsOfService, $expression);
+        
+        // For safety, only allow basic mathematical operations
         try {
-            return eval("return $expression;");
+            // Remove any non-numeric, operator, or decimal characters for security
+            if (!preg_match('/^[0-9+\-*\/().\s]+$/', $expression)) {
+                Log::error("Unsafe formula expression for employee payroll item {$this->uuid}: {$expression}");
+                return 0;
+            }
+            
+            // Evaluate the cleaned expression
+            $result = eval("return $expression;");
+            return is_numeric($result) ? (float) $result : 0;
         } catch (Exception $e) {
-            \Log::error("Formula evaluation error for employee payroll item {$this->uuid}: " . $e->getMessage());
+            Log::error("Formula evaluation error for employee payroll item {$this->uuid}: " . $e->getMessage());
             return 0;
         }
     }
 
     private function logChange(string $action, array $oldValues, array $newValues, string $userId, string $reason = null)
     {
-        PayrollItemHistory::create([
-            'employee_payroll_item_uuid' => $this->uuid,
+        // TODO: Implement PayrollItemHistory model and logging
+        Log::info("Employee payroll item {$action}", [
+            'item_uuid' => $this->uuid,
+            'employee_uuid' => $this->employee_uuid,
             'action' => $action,
             'previous_values' => $oldValues,
             'new_values' => $newValues,

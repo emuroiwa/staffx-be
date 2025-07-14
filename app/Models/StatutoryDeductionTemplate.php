@@ -125,21 +125,41 @@ class StatutoryDeductionTemplate extends Model
         $totalTax = 0;
         $details = [];
 
-        foreach ($brackets as $bracket) {
-            if ($salary > $bracket['min']) {
-                $maxForBracket = $bracket['max'] ?? $salary;
-                $taxableInBracket = min($salary, $maxForBracket) - $bracket['min'];
-                
-                if ($taxableInBracket > 0) {
-                    $taxInBracket = $taxableInBracket * $bracket['rate'];
-                    $totalTax += $taxInBracket;
+        // Sort brackets by min value to ensure proper order
+        usort($brackets, function($a, $b) {
+            return $a['min'] <=> $b['min'];
+        });
 
-                    $details[] = [
-                        'bracket' => $bracket,
-                        'taxable_amount' => $taxableInBracket,
-                        'tax_amount' => $taxInBracket
-                    ];
-                }
+        foreach ($brackets as $bracket) {
+            $bracketMin = $bracket['min'];
+            $bracketMax = $bracket['max'];
+            
+            // Skip if salary doesn't reach this bracket
+            if ($salary <= $bracketMin) {
+                continue;
+            }
+            
+            // Calculate the amount of salary that falls within this bracket
+            $salaryInBracket = 0;
+            
+            if ($bracketMax === null) {
+                // Top bracket - no upper limit
+                $salaryInBracket = $salary - $bracketMin;
+            } else {
+                // Middle bracket - has upper limit
+                $salaryInBracket = min($salary, $bracketMax) - $bracketMin;
+            }
+            
+            // Only process if there's salary in this bracket
+            if ($salaryInBracket > 0) {
+                $taxInBracket = $salaryInBracket * $bracket['rate'];
+                $totalTax += $taxInBracket;
+
+                $details[] = [
+                    'bracket' => $bracket,
+                    'taxable_amount' => $salaryInBracket,
+                    'tax_amount' => $taxInBracket
+                ];
             }
         }
 

@@ -5,11 +5,18 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use App\Traits\HasUuid;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Log;
+use Exception;
 
 class CompanyPayrollTemplate extends Model
 {
-    use HasUuid;
+    use HasFactory;
+
+    public $incrementing = false;
+    protected $keyType = 'string';
+    protected $primaryKey = 'uuid';
 
     protected $fillable = [
         'company_uuid',
@@ -41,6 +48,21 @@ class CompanyPayrollTemplate extends Model
         'is_active' => 'boolean',
         'requires_approval' => 'boolean'
     ];
+
+    /**
+     * Boot the model.
+     */
+    protected static function boot()
+    {
+        parent::boot();
+
+        // Auto-generate UUID on creation
+        static::creating(function ($template) {
+            if (empty($template->uuid)) {
+                $template->uuid = (string) Str::uuid();
+            }
+        });
+    }
 
     // Relationships
     public function company(): BelongsTo
@@ -113,19 +135,32 @@ class CompanyPayrollTemplate extends Model
 
     private function evaluateFormula(Employee $employee, float $baseSalary): float
     {
-        // Simple formula evaluation - could be enhanced with a proper expression parser
+        // Simple formula evaluation - for safety, we'll implement basic math operations
         $expression = $this->formula_expression;
         
-        // Replace variables
-        $expression = str_replace('{basic_salary}', $employee->salary, $expression);
-        $expression = str_replace('{gross_salary}', $baseSalary, $expression);
-        $expression = str_replace('{years_of_service}', $employee->years_of_service ?? 0, $expression);
+        // Replace variables with actual values
+        $basicSalary = $employee->salary ?? 0;
+        // Calculate years of service from hire_date
+        $yearsOfService = $employee->hire_date ? now()->diffInYears($employee->hire_date) : 0;
         
-        // Evaluate safely (in production, use a proper expression parser)
+        $expression = str_replace('{basic_salary}', $basicSalary, $expression);
+        $expression = str_replace('{gross_salary}', $baseSalary, $expression);
+        $expression = str_replace('{years_of_service}', $yearsOfService, $expression);
+        
+        // For safety, only allow basic mathematical operations
+        // This is a simplified implementation - in production use a proper expression parser
         try {
-            return eval("return $expression;");
+            // Remove any non-numeric, operator, or decimal characters for security
+            if (!preg_match('/^[0-9+\-*\/().\s]+$/', $expression)) {
+                Log::error("Unsafe formula expression for template {$this->code}: {$expression}");
+                return 0;
+            }
+            
+            // Evaluate the cleaned expression
+            $result = eval("return $expression;");
+            return is_numeric($result) ? (float) $result : 0;
         } catch (Exception $e) {
-            \Log::error("Formula evaluation error for template {$this->code}: " . $e->getMessage());
+            Log::error("Formula evaluation error for template {$this->code}: " . $e->getMessage());
             return 0;
         }
     }
