@@ -70,8 +70,8 @@ Route::get('/metrics', function () {
 Route::prefix('auth')->group(function () {
     Route::post('login', [AuthController::class, 'login']);
     Route::post('register', [AuthController::class, 'register']);
-    Route::post('forgot-password', [AuthController::class, 'forgotPassword']);
-    Route::post('reset-password', [AuthController::class, 'resetPassword']);
+    Route::post('forgot-password', [AuthController::class, 'forgotPassword'])->name('password.forgot');
+    Route::post('reset-password', [AuthController::class, 'resetPassword'])->name('password.reset');
     
     // Email verification routes
     Route::get('email/verify/{id}/{hash}', [AuthController::class, 'verifyEmail'])
