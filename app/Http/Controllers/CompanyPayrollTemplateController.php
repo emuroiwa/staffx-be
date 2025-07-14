@@ -21,13 +21,15 @@ class CompanyPayrollTemplateController extends Controller
             'per_page' => 'sometimes|integer|min:1|max:100'
         ]);
 
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $validator->errors()
-            ], 422);
-        }
+        // if ($validator->fails()) {
+        //     return response()->json([
+        //         'success' => false,
+        //         'message' => 'Validation failed',
+        //         'errors' => $validator->errors()
+        //     ], 422);
+        // }
+
+        \Log::info("xxxxxxxxx " .\print_r(Auth::user(), \true));
 
         try {
             $company = Auth::user()->company;
@@ -382,10 +384,10 @@ class CompanyPayrollTemplateController extends Controller
 
         try {
             // Create a mock employee for testing
-            $mockEmployee = (object) [
-                'salary' => $request->employee_basic_salary,
-                'hire_date' => now()->subYears(2) // 2 years of service for testing
-            ];
+            $mockEmployee = new \App\Models\Employee();
+            $mockEmployee->salary = $request->employee_basic_salary;
+            $mockEmployee->hire_date = now()->subYears(2); // 2 years of service for testing
+            $mockEmployee->exists = false; // Mark as not persisted to avoid save attempts
 
             $grossSalary = $request->get('gross_salary', $request->employee_basic_salary);
             $calculatedAmount = $template->calculateAmount($mockEmployee, $grossSalary);

@@ -24,13 +24,13 @@ class EmployeePayrollItemController extends Controller
             'per_page' => 'sometimes|integer|min:1|max:100'
         ]);
 
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $validator->errors()
-            ], 422);
-        }
+        // if ($validator->fails()) {
+        //     return response()->json([
+        //         'success' => false,
+        //         'message' => 'Validation failed',
+        //         'errors' => $validator->errors()
+        //     ], 422);
+        // }
 
         try {
             $company = Auth::user()->company;

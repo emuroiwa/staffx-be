@@ -98,6 +98,23 @@ class Company extends Model
     }
 
     /**
+     * Get the departments for the company.
+     */
+    public function departments(): HasMany
+    {
+        return $this->hasMany(Department::class, 'company_uuid', 'uuid');
+    }
+
+    /**
+     * Get the positions for the company.
+     */
+    public function positions(): HasMany
+    {       
+        return $this->hasMany(Position::class, 'company_uuid', 'uuid');
+    }
+
+
+    /**
      * Get the employees for the company.
      */
     public function employees(): HasMany

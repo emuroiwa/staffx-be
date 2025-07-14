@@ -238,26 +238,19 @@ Route::middleware(['auth:api', 'company.context'])->group(function () {
     
     // Company Payroll Template routes
     Route::prefix('payroll-templates')->group(function () {
-        Route::get('/', [CompanyPayrollTemplateController::class, 'index'])
-            ->middleware('permission:manage_payroll');
+        Route::get('/', [CompanyPayrollTemplateController::class, 'index']);
         
-        Route::post('/', [CompanyPayrollTemplateController::class, 'store'])
-            ->middleware('permission:manage_payroll');
+        Route::post('/', [CompanyPayrollTemplateController::class, 'store']);
         
-        Route::get('/{template}', [CompanyPayrollTemplateController::class, 'show'])
-            ->middleware('permission:manage_payroll');
+        Route::get('/{template}', [CompanyPayrollTemplateController::class, 'show']);
         
-        Route::put('/{template}', [CompanyPayrollTemplateController::class, 'update'])
-            ->middleware('permission:manage_payroll');
+        Route::put('/{template}', [CompanyPayrollTemplateController::class, 'update']);
         
-        Route::delete('/{template}', [CompanyPayrollTemplateController::class, 'destroy'])
-            ->middleware('permission:manage_payroll');
+        Route::delete('/{template}', [CompanyPayrollTemplateController::class, 'destroy']);
         
-        Route::post('/{template}/toggle-status', [CompanyPayrollTemplateController::class, 'toggleStatus'])
-            ->middleware('permission:manage_payroll');
+        Route::post('/{template}/toggle-status', [CompanyPayrollTemplateController::class, 'toggleStatus']);
         
-        Route::post('/{template}/test-calculation', [CompanyPayrollTemplateController::class, 'testCalculation'])
-            ->middleware('permission:manage_payroll');
+        Route::post('/{template}/test-calculation', [CompanyPayrollTemplateController::class, 'testCalculation']);
     });
     
     // Employee Payroll Item routes

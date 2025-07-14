@@ -86,13 +86,25 @@ class CompanyPayrollTemplate extends Model
     // Business Logic Methods
     public function calculateAmount(Employee $employee, float $baseSalary): float
     {
-        return match($this->calculation_method) {
-            'fixed_amount' => $this->amount ?? $this->default_amount ?? 0,
-            'percentage_of_salary' => ($baseSalary * ($this->default_percentage / 100)),
-            'percentage_of_basic' => ($employee->salary * ($this->default_percentage / 100)),
+        $result = match($this->calculation_method) {
+            'fixed_amount' => (float) ($this->amount ?? $this->default_amount ?? 0),
+            'percentage_of_salary' => ($baseSalary * ((float) ($this->default_percentage ?? 0) / 100)),
+            'percentage_of_basic' => (($employee->salary ?? 0) * ((float) ($this->default_percentage ?? 0) / 100)),
             'formula' => $this->evaluateFormula($employee, $baseSalary),
-            'manual' => 0 // Requires manual input
+            'manual' => 0, // Requires manual input
+            default => 0
         };
+
+        // Apply min/max constraints
+        if ($this->minimum_amount && $result < (float) $this->minimum_amount) {
+            $result = (float) $this->minimum_amount;
+        }
+        
+        if ($this->maximum_amount && $result > (float) $this->maximum_amount) {
+            $result = (float) $this->maximum_amount;
+        }
+
+        return round($result, 2);
     }
 
     public function isApplicableToEmployee(Employee $employee): bool
@@ -209,21 +221,12 @@ class CompanyPayrollTemplate extends Model
             return ['amount' => 0];
         }
 
-        $amount = $this->calculateAmount($employee, $employee->salary);
-        
-        // Apply min/max constraints
-        if ($this->minimum_amount && $amount < $this->minimum_amount) {
-            $amount = $this->minimum_amount;
-        }
-        
-        if ($this->maximum_amount && $amount > $this->maximum_amount) {
-            $amount = $this->maximum_amount;
-        }
+        $amount = $this->calculateAmount($employee, (float) ($employee->salary ?? 0));
 
         return [
-            'amount' => round($amount, 2),
+            'amount' => $amount,
             'calculation_method' => $this->calculation_method,
-            'base_value' => $employee->salary
+            'base_value' => (float) ($employee->salary ?? 0)
         ];
     }
 }
