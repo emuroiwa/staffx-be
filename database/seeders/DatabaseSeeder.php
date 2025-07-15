@@ -18,6 +18,7 @@ class DatabaseSeeder extends Seeder
             CurrenciesSeeder::class,
             CountrySeeder::class,
             TaxJurisdictionSeeder::class,
+            StatutoryDeductionTemplateSeeder::class,
         ]);
 
         // User::factory(10)->create();
