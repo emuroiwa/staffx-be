@@ -26,6 +26,7 @@ class RegisterRequest extends FormRequest
             'last_name' => 'required|string|max:255',
             'email' => 'required|email|unique:users',
             'company' => 'required|string|max:255',
+            'country_uuid' => 'required|uuid|exists:countries,uuid',
             'password' => 'required|string|min:8|confirmed',
         ];
     }

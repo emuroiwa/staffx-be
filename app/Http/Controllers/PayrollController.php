@@ -5,11 +5,13 @@ namespace App\Http\Controllers;
 use App\Models\Payroll;
 use App\Models\Employee;
 use App\Models\Company;
+use App\Models\EmployeePayrollItem;
 use App\Services\Payroll\PayrollCalculationService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 
 class PayrollController extends Controller
@@ -432,6 +434,193 @@ class PayrollController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to retrieve statistics: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Calculate statutory deductions for an employee
+     */
+    public function calculateStatutoryDeductions(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'employee_uuid' => 'required|string|exists:employees,uuid',
+            'gross_salary' => 'required|numeric|min:0',
+            'payroll_date' => 'nullable|date'
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        try {
+            $company = Auth::user()->company;
+            $employee = Employee::where('uuid', $request->employee_uuid)
+                ->where('company_uuid', $company->uuid)
+                ->first();
+
+            if (!$employee) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Employee not found'
+                ], 404);
+            }
+
+            // Get country and current tax jurisdiction
+            $country = $employee->company->country;
+            Log::info('Calculating statutory deductions for employee', [
+                'employee_uuid' => $employee->uuid,
+                'gross_salary' => $request->gross_salary,
+                'country' => $country?->name,
+                'payroll_date' => $request->payroll_date
+            ]);
+            $taxJurisdiction = $country?->getCurrentTaxJurisdiction();
+
+            if (!$taxJurisdiction) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No active tax jurisdiction found for this employee'
+                ], 400);
+            }
+
+            // Calculate statutory deductions using the StatutoryDeductionCalculator
+            $calculator = new \App\Services\Payroll\StatutoryDeductionCalculator();
+            $payrollDate = $request->payroll_date ? Carbon::parse($request->payroll_date) : now();
+            $deductions = $calculator->calculateForEmployee($employee, $request->gross_salary, $payrollDate);
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'employee_uuid' => $employee->uuid,
+                    'gross_salary' => $request->gross_salary,
+                    'payroll_date' => $payrollDate->format('Y-m-d'),
+                    'tax_jurisdiction' => $taxJurisdiction->name,
+                    'deductions' => $deductions
+                ],
+                'message' => 'Statutory deductions calculated successfully'
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to calculate statutory deductions: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Generate payslip for an employee
+     */
+    public function generatePayslip(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'employee_uuid' => 'required|string|exists:employees,uuid',
+            'payroll_items' => 'required|array',
+            'payroll_items.*.uuid' => 'required|string|exists:employee_payroll_items,uuid',
+            'statutory_deductions' => 'sometimes|array'
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        try {
+            $company = Auth::user()->company;
+            $employee = Employee::where('uuid', $request->employee_uuid)
+                ->where('company_uuid', $company->uuid)
+                ->first();
+
+            if (!$employee) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Employee not found'
+                ], 404);
+            }
+
+            // Load payroll items
+            $payrollItemUuids = collect($request->payroll_items)->pluck('uuid');
+            $payrollItems = EmployeePayrollItem::whereIn('uuid', $payrollItemUuids)
+                ->where('employee_uuid', $employee->uuid)
+                ->where('status', 'active')
+                ->get();
+
+            // Calculate basic salary and allowances
+            $basicSalary = $employee->salary;
+            $allowances = $payrollItems->where('type', 'allowance');
+            $deductions = $payrollItems->where('type', 'deduction');
+
+            $totalAllowances = $allowances->sum('calculated_amount');
+            $grossSalary = $basicSalary + $totalAllowances;
+
+            // Calculate statutory deductions
+            $statutoryDeductions = $request->statutory_deductions ?? [];
+            $totalStatutoryDeductions = collect($statutoryDeductions)->sum('amount');
+
+            $totalOtherDeductions = $deductions->sum('calculated_amount');
+            $totalDeductions = $totalStatutoryDeductions + $totalOtherDeductions;
+
+            $netSalary = $grossSalary - $totalDeductions;
+
+            $payslipData = [
+                'employee' => [
+                    'uuid' => $employee->uuid,
+                    'name' => $employee->display_name,
+                    'employee_id' => $employee->employee_id,
+                    'position' => $employee->position?->name,
+                    'department' => $employee->department?->name
+                ],
+                'period' => [
+                    'month' => now()->format('F Y'),
+                    'generated_at' => now()
+                ],
+                'earnings' => [
+                    'basic_salary' => $basicSalary,
+                    'allowances' => $allowances->map(function ($item) {
+                        return [
+                            'name' => $item->name,
+                            'amount' => $item->calculated_amount
+                        ];
+                    }),
+                    'total_allowances' => $totalAllowances,
+                    'gross_salary' => $grossSalary
+                ],
+                'deductions' => [
+                    'statutory' => $statutoryDeductions,
+                    'other' => $deductions->map(function ($item) {
+                        return [
+                            'name' => $item->name,
+                            'amount' => $item->calculated_amount
+                        ];
+                    }),
+                    'total_statutory' => $totalStatutoryDeductions,
+                    'total_other' => $totalOtherDeductions,
+                    'total_deductions' => $totalDeductions
+                ],
+                'summary' => [
+                    'gross_salary' => $grossSalary,
+                    'total_deductions' => $totalDeductions,
+                    'net_salary' => $netSalary
+                ]
+            ];
+
+            return response()->json([
+                'success' => true,
+                'data' => $payslipData,
+                'message' => 'Payslip generated successfully'
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to generate payslip: ' . $e->getMessage()
             ], 500);
         }
     }

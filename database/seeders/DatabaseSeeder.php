@@ -16,6 +16,7 @@ class DatabaseSeeder extends Seeder
         // Seed currencies first (reference data)
         $this->call([
             CurrenciesSeeder::class,
+            CountrySeeder::class,
             TaxJurisdictionSeeder::class,
         ]);
 

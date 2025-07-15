@@ -25,8 +25,9 @@ class AuthService
      */
     public function register(array $userData): array
     {
-        // Extract company name before user processing
+        // Extract company name and country before user processing
         $companyName = $userData['company'];
+        $countryUuid = $userData['country_uuid'];
         
         // Combine first and last name
         $userData['name'] = $userData['first_name'] . ' ' . $userData['last_name'];
@@ -35,7 +36,7 @@ class AuthService
         $userData['role'] = 'holding_company_admin';
         
         // Remove fields not needed for user creation
-        unset($userData['first_name'], $userData['last_name'], $userData['company']);
+        unset($userData['first_name'], $userData['last_name'], $userData['company'], $userData['country_uuid']);
         
         try {
             DB::beginTransaction();
@@ -46,6 +47,7 @@ class AuthService
             // Create the user's first company (skip validation during registration)
             $company = $this->companyService->createCompany([
                 'name' => $companyName,
+                'country_uuid' => $countryUuid,
                 'is_active' => true,
             ], $user, true); // skipValidation = true
             

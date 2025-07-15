@@ -87,8 +87,24 @@ class CompanyPayrollTemplateController extends Controller
             'formula_expression' => 'required_if:calculation_method,formula|nullable|string',
             'minimum_amount' => 'sometimes|nullable|numeric|min:0',
             'maximum_amount' => 'sometimes|nullable|numeric|min:0|gte:minimum_amount',
-            'is_taxable' => 'sometimes|boolean',
-            'is_pensionable' => 'sometimes|boolean',
+            'is_taxable' => [
+                'sometimes',
+                'boolean',
+                function ($attribute, $value, $fail) use ($request) {
+                    if ($request->type === 'deduction' && $value === true) {
+                        $fail('Deductions cannot be taxable as they reduce taxable income.');
+                    }
+                }
+            ],
+            'is_pensionable' => [
+                'sometimes',
+                'boolean',
+                function ($attribute, $value, $fail) use ($request) {
+                    if ($request->type === 'deduction' && $value === true) {
+                        $fail('Deductions cannot be pensionable as they reduce pensionable income.');
+                    }
+                }
+            ],
             'eligibility_rules' => 'sometimes|array',
             'requires_approval' => 'sometimes|boolean'
         ]);
@@ -122,6 +138,10 @@ class CompanyPayrollTemplateController extends Controller
                 ], 422);
             }
 
+            // Automatically set taxable/pensionable based on type
+            $isTaxable = $request->type === 'deduction' ? false : $request->get('is_taxable', true);
+            $isPensionable = $request->type === 'deduction' ? false : $request->get('is_pensionable', true);
+
             $template = CompanyPayrollTemplate::create([
                 'company_uuid' => $company->uuid,
                 'code' => $request->code,
@@ -134,8 +154,8 @@ class CompanyPayrollTemplateController extends Controller
                 'formula_expression' => $request->formula_expression,
                 'minimum_amount' => $request->minimum_amount,
                 'maximum_amount' => $request->maximum_amount,
-                'is_taxable' => $request->get('is_taxable', true),
-                'is_pensionable' => $request->get('is_pensionable', true),
+                'is_taxable' => $isTaxable,
+                'is_pensionable' => $isPensionable,
                 'eligibility_rules' => $request->get('eligibility_rules', []),
                 'requires_approval' => $request->get('requires_approval', false),
                 'is_active' => true
@@ -219,8 +239,26 @@ class CompanyPayrollTemplateController extends Controller
             'formula_expression' => 'sometimes|nullable|string',
             'minimum_amount' => 'sometimes|nullable|numeric|min:0',
             'maximum_amount' => 'sometimes|nullable|numeric|min:0',
-            'is_taxable' => 'sometimes|boolean',
-            'is_pensionable' => 'sometimes|boolean',
+            'is_taxable' => [
+                'sometimes',
+                'boolean',
+                function ($attribute, $value, $fail) use ($request, $template) {
+                    $type = $request->type ?? $template->type;
+                    if ($type === 'deduction' && $value === true) {
+                        $fail('Deductions cannot be taxable as they reduce taxable income.');
+                    }
+                }
+            ],
+            'is_pensionable' => [
+                'sometimes',
+                'boolean',
+                function ($attribute, $value, $fail) use ($request, $template) {
+                    $type = $request->type ?? $template->type;
+                    if ($type === 'deduction' && $value === true) {
+                        $fail('Deductions cannot be pensionable as they reduce pensionable income.');
+                    }
+                }
+            ],
             'eligibility_rules' => 'sometimes|array',
             'requires_approval' => 'sometimes|boolean',
             'is_active' => 'sometimes|boolean'
@@ -235,12 +273,27 @@ class CompanyPayrollTemplateController extends Controller
         }
 
         try {
-            $template->update($request->only([
+            $updateData = $request->only([
                 'name', 'description', 'calculation_method', 'amount', 
                 'default_percentage', 'formula_expression', 'minimum_amount',
-                'maximum_amount', 'is_taxable', 'is_pensionable', 
-                'eligibility_rules', 'requires_approval', 'is_active'
-            ]));
+                'maximum_amount', 'eligibility_rules', 'requires_approval', 'is_active'
+            ]);
+
+            // Handle taxable/pensionable based on type
+            $currentType = $request->type ?? $template->type;
+            if ($currentType === 'deduction') {
+                $updateData['is_taxable'] = false;
+                $updateData['is_pensionable'] = false;
+            } else {
+                if ($request->has('is_taxable')) {
+                    $updateData['is_taxable'] = $request->is_taxable;
+                }
+                if ($request->has('is_pensionable')) {
+                    $updateData['is_pensionable'] = $request->is_pensionable;
+                }
+            }
+
+            $template->update($updateData);
 
             return response()->json([
                 'success' => true,

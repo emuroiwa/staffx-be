@@ -68,6 +68,10 @@ Route::get('/metrics', function () {
     return response()->json($metrics);
 });
 
+// Countries routes (public for registration)
+Route::get('countries', [App\Http\Controllers\Api\CountryController::class, 'index']);
+Route::get('countries/payroll-supported', [App\Http\Controllers\Api\CountryController::class, 'payrollSupported']);
+
 // Authentication routes
 Route::prefix('auth')->group(function () {
     Route::post('login', [AuthController::class, 'login']);
@@ -234,6 +238,15 @@ Route::middleware(['auth:api', 'company.context'])->group(function () {
         
         Route::post('/{payroll}/process', [PayrollController::class, 'process'])
             ->middleware('permission:process_payroll');
+    });
+
+    // Payroll calculation routes
+    Route::prefix('payroll')->group(function () {
+        Route::post('/calculate-statutory-deductions', [PayrollController::class, 'calculateStatutoryDeductions'])
+            ->middleware('permission:manage_payroll');
+        
+        Route::post('/generate-payslip', [PayrollController::class, 'generatePayslip'])
+            ->middleware('permission:manage_payroll');
     });
     
     // Company Payroll Template routes
