@@ -35,7 +35,7 @@ class UpdateEmployeeRequest extends FormRequest
                 'max:255',
                 Rule::unique('employees', 'email')
                     ->where('company_uuid', $companyUuid)
-                    ->ignore($employee->uuid, 'uuid')
+                    ->ignore($employee, 'uuid')
             ],
             'phone' => ['sometimes', 'nullable', 'string', 'max:20'],
             'address' => ['sometimes', 'nullable', 'string', 'max:500'],
@@ -62,7 +62,7 @@ class UpdateEmployeeRequest extends FormRequest
                 'nullable',
                 'uuid',
                 Rule::exists('employees', 'uuid')->where('company_uuid', $companyUuid)->where('status', 'active'),
-                'not_in:' . $employee->uuid // Cannot be their own manager
+                'not_in:' . $employee // Cannot be their own manager
             ],
             
             // User account linkage updates
@@ -89,7 +89,7 @@ class UpdateEmployeeRequest extends FormRequest
                 'max:50',
                 Rule::unique('employees', 'national_id')
                     ->where('company_uuid', $companyUuid)
-                    ->ignore($employee->uuid, 'uuid')
+                    ->ignore($employee, 'uuid')
             ],
             'passport_number' => [
                 'sometimes',
@@ -98,7 +98,7 @@ class UpdateEmployeeRequest extends FormRequest
                 'max:50',
                 Rule::unique('employees', 'passport_number')
                     ->where('company_uuid', $companyUuid)
-                    ->ignore($employee->uuid, 'uuid')
+                    ->ignore($employee, 'uuid')
             ],
             
             'emergency_contact_name' => ['sometimes', 'nullable', 'string', 'max:255'],

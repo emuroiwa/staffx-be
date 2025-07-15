@@ -472,12 +472,7 @@ class PayrollController extends Controller
 
             // Get country and current tax jurisdiction
             $country = $employee->company->country;
-            Log::info('Calculating statutory deductions for employee', [
-                'employee_uuid' => $employee->uuid,
-                'gross_salary' => $request->gross_salary,
-                'country' => $country?->name,
-                'payroll_date' => $request->payroll_date
-            ]);
+    
             $taxJurisdiction = $country?->getCurrentTaxJurisdiction();
 
             if (!$taxJurisdiction) {

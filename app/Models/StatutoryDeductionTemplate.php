@@ -168,16 +168,23 @@ class StatutoryDeductionTemplate extends Model
             }
         }
 
-        // Apply rebates if specified
+        // Apply rebates based on age (for now, apply only primary rebate)
+        // TODO: Add age parameter to calculation for proper rebate application
         $rebates = $this->rules['rebates'] ?? [];
-        foreach ($rebates as $rebateType => $amount) {
-            $totalTax -= $amount;
+        
+        // Apply primary rebate (available to all taxpayers under 65)
+        if (isset($rebates['primary'])) {
+            $rebateAmount = $rebates['primary'];
+            $totalTax -= $rebateAmount;
             $details[] = [
                 'type' => 'rebate',
-                'rebate_type' => $rebateType,
-                'amount' => -$amount
+                'rebate_type' => 'primary',
+                'amount' => -$rebateAmount
             ];
         }
+        
+        // Note: Secondary and tertiary rebates should only be applied based on taxpayer age
+        // This would require passing age information to the calculation method
 
         $employeeAmount = max(0, $totalTax);
         $employerAmount = $salary * $this->employer_rate;
