@@ -99,8 +99,8 @@ class AuthService
             throw new \Exception('Invalid credentials');
         }
 
-        // Check subscription status - load company relationship
-        $user->load('company');
+        // Check subscription status - load company relationship with currency
+        $user->load('company.currency');
         
         // For HCA users, check if they have any active company subscriptions
         if ($user->isHoldingCompanyAdmin()) {

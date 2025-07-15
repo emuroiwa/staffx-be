@@ -49,6 +49,7 @@ class AuthController extends Controller
                 'data' => [
                     'token' => $result['token'],
                     'user' => new UserResource($result['user']),
+                    'company' => $result['user']->company()->with('currency')->first(),
                 ],
             ]);
         } catch (\Exception $e) {

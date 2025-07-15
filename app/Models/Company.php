@@ -23,6 +23,7 @@ class Company extends Model
         'uuid',
         'created_by_uuid',
         'country_uuid',
+        'currency_uuid',
         'name',
         'slug',
         'domain',
@@ -87,6 +88,14 @@ class Company extends Model
     public function country(): BelongsTo
     {
         return $this->belongsTo(Country::class, 'country_uuid', 'uuid');
+    }
+
+    /**
+     * Get the currency for this company.
+     */
+    public function currency(): BelongsTo
+    {
+        return $this->belongsTo(Currency::class, 'currency_uuid', 'uuid');
     }
 
     /**

@@ -71,11 +71,6 @@ class StoreEmployeeRequest extends FormRequest
             'is_uif_exempt' => ['boolean'],
             
             'salary' => ['nullable', 'numeric', 'min:0'],
-            'currency_uuid' => [
-                'nullable',
-                'uuid',
-                Rule::exists('currencies', 'uuid')->where('is_active', true)
-            ],
             'tax_number' => ['nullable', 'string', 'max:50'],
             'pay_frequency' => ['required', Rule::in(['weekly', 'bi_weekly', 'monthly', 'quarterly', 'annually'])],
             
@@ -138,16 +133,6 @@ class StoreEmployeeRequest extends FormRequest
         $this->merge([
             'company_uuid' => auth()->user()->company_uuid,
         ]);
-
-        // Set default currency if not provided
-        if (!$this->has('currency_uuid')) {
-            $defaultCurrency = \App\Models\Currency::where('code', 'USD')->where('is_active', true)->first();
-            if ($defaultCurrency) {
-                $this->merge([
-                    'currency_uuid' => $defaultCurrency->uuid,
-                ]);
-            }
-        }
     }
 
     /**

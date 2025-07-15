@@ -17,7 +17,7 @@ class EmployeeRepository extends BaseRepository
     {
         $query = Employee::query()
             ->where('company_uuid', $user->company_uuid)
-            ->with(['department', 'position', 'manager', 'user', 'company', 'currency']);
+            ->with(['department', 'position', 'manager', 'user', 'company']);
 
         // Apply search filter
         if (!empty($filters['search'])) {
@@ -91,7 +91,7 @@ class EmployeeRepository extends BaseRepository
     {
         return Employee::where('uuid', $uuid)
             ->where('company_uuid', $user->company_uuid)
-            ->with(['department', 'position', 'manager', 'directReports', 'user', 'company', 'currency'])
+            ->with(['department', 'position', 'manager', 'directReports', 'user', 'company'])
             ->first();
     }
 
@@ -112,7 +112,7 @@ class EmployeeRepository extends BaseRepository
     public function updateEmployee(Employee $employee, array $data): Employee
     {
         $employee->update($data);
-        return $employee->fresh(['department', 'position', 'manager', 'directReports', 'user', 'currency']);
+        return $employee->fresh(['department', 'position', 'manager', 'directReports', 'user']);
     }
 
     /**

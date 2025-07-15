@@ -38,7 +38,6 @@ class Employee extends Model
         'is_independent_contractor',
         'is_uif_exempt',
         'salary',
-        'currency_uuid',
         'tax_number',
         'bank_details',
         'pay_frequency',
@@ -144,13 +143,6 @@ class Employee extends Model
         return $this->belongsTo(Position::class, 'position_uuid', 'id');
     }
 
-    /**
-     * Get the currency for this employee.
-     */
-    public function currency(): BelongsTo
-    {
-        return $this->belongsTo(Currency::class, 'currency_uuid', 'uuid');
-    }
 
     /**
      * Get the manager of this employee.
@@ -205,7 +197,7 @@ class Employee extends Model
      */
     public function getFormattedSalaryAttribute(): string
     {
-        $symbol = $this->currency ? $this->currency->symbol : '$';
+        $symbol = $this->company && $this->company->currency ? $this->company->currency->symbol : 'R';
         return $symbol . number_format($this->salary, 2);
     }
 
