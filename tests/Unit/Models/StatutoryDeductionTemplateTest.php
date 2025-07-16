@@ -330,4 +330,231 @@ class StatutoryDeductionTemplateTest extends TestCase
         $this->assertIsString($template->uuid);
         $this->assertEquals(36, strlen($template->uuid));
     }
+
+    /** @test */
+    public function it_annualizes_salary_correctly_for_different_pay_frequencies()
+    {
+        $template = StatutoryDeductionTemplate::factory()->create([
+            'calculation_method' => 'progressive_bracket',
+            'rules' => [
+                'brackets' => [
+                    ['min' => 0, 'max' => 100000, 'rate' => 0.18],
+                    ['min' => 100000, 'max' => 200000, 'rate' => 0.26],
+                    ['min' => 200000, 'max' => null, 'rate' => 0.31]
+                ],
+                'rebates' => ['primary' => 16425]
+            ]
+        ]);
+
+        // Test different pay frequencies with equivalent annual salaries
+        $testCases = [
+            ['salary' => 20000, 'frequency' => 'monthly', 'expected_annual' => 240000],
+            ['salary' => 4615.384615384615, 'frequency' => 'weekly', 'expected_annual' => 240000], // 240000/52
+            ['salary' => 9230.769230769231, 'frequency' => 'bi_weekly', 'expected_annual' => 240000], // 240000/26
+            ['salary' => 60000, 'frequency' => 'quarterly', 'expected_annual' => 240000],
+            ['salary' => 240000, 'frequency' => 'annually', 'expected_annual' => 240000],
+        ];
+
+        foreach ($testCases as $case) {
+            $result = $template->calculateDeduction($case['salary'], $case['frequency']);
+            
+            $this->assertEquals(
+                $case['expected_annual'], 
+                $result['calculation_details']['annual_salary_used'],
+                "Annual salary should be correct for {$case['frequency']} frequency",
+                0.5 // Allow 0.5 unit tolerance for rounding
+            );
+        }
+    }
+
+    /** @test */
+    public function it_pro_rates_progressive_bracket_tax_correctly()
+    {
+        $template = StatutoryDeductionTemplate::factory()->create([
+            'calculation_method' => 'progressive_bracket',
+            'rules' => [
+                'brackets' => [
+                    ['min' => 0, 'max' => 100000, 'rate' => 0.18],
+                    ['min' => 100000, 'max' => 200000, 'rate' => 0.26],
+                    ['min' => 200000, 'max' => null, 'rate' => 0.31]
+                ],
+                'rebates' => ['primary' => 16425]
+            ]
+        ]);
+
+        // Test with same annual salary (R240,000) across different frequencies
+        $monthlySalary = 20000;
+        $weeklySalary = 4615.38;
+
+        $monthlyResult = $template->calculateDeduction($monthlySalary, 'monthly');
+        $weeklyResult = $template->calculateDeduction($weeklySalary, 'weekly');
+
+        // Both should calculate the same annual tax
+        $this->assertEquals(
+            $monthlyResult['calculation_details']['annual_tax_calculated'],
+            $weeklyResult['calculation_details']['annual_tax_calculated'],
+            'Annual tax should be the same regardless of pay frequency',
+            0.01
+        );
+
+        // Pro-rating should be mathematically correct
+        $expectedWeeklyFromMonthly = $monthlyResult['employee_amount'] / (52/12);
+        $this->assertEquals(
+            $expectedWeeklyFromMonthly,
+            $weeklyResult['employee_amount'],
+            'Weekly tax should be correctly pro-rated from monthly',
+            0.01
+        );
+    }
+
+    /** @test */
+    public function it_includes_pay_frequency_details_in_progressive_calculation()
+    {
+        $template = StatutoryDeductionTemplate::factory()->create([
+            'calculation_method' => 'progressive_bracket',
+            'rules' => [
+                'brackets' => [
+                    ['min' => 0, 'max' => 100000, 'rate' => 0.18],
+                    ['min' => 100000, 'max' => null, 'rate' => 0.26]
+                ],
+                'rebates' => ['primary' => 16425]
+            ]
+        ]);
+
+        $result = $template->calculateDeduction(5000, 'weekly');
+
+        $this->assertArrayHasKey('calculation_details', $result);
+        $this->assertArrayHasKey('pay_frequency', $result['calculation_details']);
+        $this->assertArrayHasKey('annual_salary_used', $result['calculation_details']);
+        $this->assertArrayHasKey('annual_tax_calculated', $result['calculation_details']);
+        $this->assertArrayHasKey('salary_used', $result['calculation_details']);
+
+        $this->assertEquals('weekly', $result['calculation_details']['pay_frequency']);
+        $this->assertEquals(5000, $result['calculation_details']['salary_used']);
+        $this->assertEquals(260000, $result['calculation_details']['annual_salary_used']); // 5000 * 52
+    }
+
+    /** @test */
+    public function it_handles_unknown_pay_frequency_with_default()
+    {
+        $template = StatutoryDeductionTemplate::factory()->create([
+            'calculation_method' => 'progressive_bracket',
+            'rules' => [
+                'brackets' => [
+                    ['min' => 0, 'max' => 100000, 'rate' => 0.18]
+                ],
+                'rebates' => ['primary' => 16425]
+            ]
+        ]);
+
+        // Test with unknown frequency - should default to monthly
+        $result = $template->calculateDeduction(25000, 'unknown_frequency');
+
+        $this->assertArrayHasKey('calculation_details', $result);
+        $this->assertEquals('unknown_frequency', $result['calculation_details']['pay_frequency']);
+        $this->assertEquals(300000, $result['calculation_details']['annual_salary_used']); // 25000 * 12 (monthly default)
+    }
+
+    /** @test */
+    public function it_maintains_backwards_compatibility_without_pay_frequency()
+    {
+        $template = StatutoryDeductionTemplate::factory()->create([
+            'calculation_method' => 'progressive_bracket',
+            'rules' => [
+                'brackets' => [
+                    ['min' => 0, 'max' => 100000, 'rate' => 0.18]
+                ],
+                'rebates' => ['primary' => 16425]
+            ]
+        ]);
+
+        // Test without pay frequency parameter - should default to monthly
+        $result = $template->calculateDeduction(25000);
+
+        $this->assertArrayHasKey('calculation_details', $result);
+        $this->assertEquals('monthly', $result['calculation_details']['pay_frequency']);
+        $this->assertEquals(300000, $result['calculation_details']['annual_salary_used']); // 25000 * 12
+    }
+
+    /** @test */
+    public function it_calculates_complex_progressive_bracket_with_rebates_correctly()
+    {
+        // South African PAYE 2025 tax brackets
+        $template = StatutoryDeductionTemplate::factory()->create([
+            'calculation_method' => 'progressive_bracket',
+            'rules' => [
+                'brackets' => [
+                    ['min' => 0, 'max' => 237100, 'rate' => 0.18],
+                    ['min' => 237101, 'max' => 370500, 'rate' => 0.26],
+                    ['min' => 370501, 'max' => 512800, 'rate' => 0.31],
+                    ['min' => 512801, 'max' => 673000, 'rate' => 0.36],
+                    ['min' => 673001, 'max' => 857900, 'rate' => 0.39],
+                    ['min' => 857901, 'max' => 1817000, 'rate' => 0.41],
+                    ['min' => 1817001, 'max' => null, 'rate' => 0.45]
+                ],
+                'rebates' => [
+                    'primary' => 17235, // 2025 primary rebate
+                    'secondary' => 9444, // 65+ rebate
+                    'tertiary' => 3145 // 75+ rebate
+                ]
+            ]
+        ]);
+
+        // Test monthly salary of R30,000 (R360,000 annually)
+        $result = $template->calculateDeduction(30000, 'monthly');
+
+        // Manual calculation for verification:
+        // Annual salary: R360,000
+        // Tax brackets:
+        // R0 - R237,100: R237,100 * 18% = R42,678
+        // R237,101 - R360,000: R122,899 * 26% = R31,954
+        // Total tax before rebates: R74,632
+        // Less primary rebate: R74,632 - R17,235 = R57,397
+        // Monthly tax: R57,397 / 12 = R4,783.08
+
+        $this->assertEquals(360000, $result['calculation_details']['annual_salary_used']);
+        $this->assertEquals(57397, $result['calculation_details']['annual_tax_calculated'], '', 2);
+        $this->assertEquals(4783.08, $result['employee_amount'], '', 0.2);
+    }
+
+    /** @test */
+    public function it_applies_only_primary_rebate_correctly()
+    {
+        $template = StatutoryDeductionTemplate::factory()->create([
+            'calculation_method' => 'progressive_bracket',
+            'rules' => [
+                'brackets' => [
+                    ['min' => 0, 'max' => 100000, 'rate' => 0.20]
+                ],
+                'rebates' => [
+                    'primary' => 10000,
+                    'secondary' => 5000, // Should not be applied
+                    'tertiary' => 2000   // Should not be applied
+                ]
+            ]
+        ]);
+
+        $result = $template->calculateDeduction(5000, 'monthly'); // R60,000 annually
+
+        // Annual tax: R60,000 * 20% = R12,000
+        // Less primary rebate only: R12,000 - R10,000 = R2,000
+        // Monthly: R2,000 / 12 = R166.67
+
+        $this->assertEquals(60000, $result['calculation_details']['annual_salary_used']);
+        $this->assertEquals(2000, $result['calculation_details']['annual_tax_calculated']);
+        $this->assertEquals(166.67, $result['employee_amount'], '', 0.01);
+
+        // Check that only primary rebate was applied
+        $bracketCalculations = $result['calculation_details']['bracket_calculations'];
+        $rebateCalculations = array_filter($bracketCalculations, function($calc) {
+            return isset($calc['type']) && $calc['type'] === 'rebate';
+        });
+        
+        $this->assertCount(1, $rebateCalculations, 'Only primary rebate should be applied');
+        
+        // Get the rebate calculation (array_filter preserves keys, so we need to get first value)
+        $rebateCalc = array_values($rebateCalculations)[0];
+        $this->assertEquals('primary', $rebateCalc['rebate_type']);
+        $this->assertEquals(-10000, $rebateCalc['amount']);
+    }
 }

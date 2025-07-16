@@ -67,15 +67,46 @@ class StatutoryDeductionTemplate extends Model
     }
 
     // Business Logic Methods
-    public function calculateDeduction(float $grossSalary): array
+    
+    /**
+     * Convert salary to annual amount based on pay frequency
+     */
+    private function annualizeSalary(float $salary, string $payFrequency): float
+    {
+        return match($payFrequency) {
+            'weekly' => $salary * 52,
+            'bi_weekly' => $salary * 26,
+            'monthly' => $salary * 12,
+            'quarterly' => $salary * 4,
+            'annually' => $salary,
+            default => $salary * 12 // Default to monthly
+        };
+    }
+    
+    /**
+     * Convert annual amount back to pay period amount
+     */
+    private function proRateFromAnnual(float $annualAmount, string $payFrequency): float
+    {
+        return match($payFrequency) {
+            'weekly' => $annualAmount / 52,
+            'bi_weekly' => $annualAmount / 26,
+            'monthly' => $annualAmount / 12,
+            'quarterly' => $annualAmount / 4,
+            'annually' => $annualAmount,
+            default => $annualAmount / 12 // Default to monthly
+        };
+    }
+    
+    public function calculateDeduction(float $grossSalary, string $payFrequency = 'monthly'): array
     {
         $cappedSalary = $this->applySalaryCap($grossSalary);
         
         return match($this->calculation_method) {
-            'percentage' => $this->calculatePercentageDeduction($cappedSalary),
-            'progressive_bracket' => $this->calculateProgressiveBracketDeduction($cappedSalary),
-            'salary_bracket' => $this->calculateSalaryBracketDeduction($cappedSalary),
-            'flat_amount' => $this->calculateFlatAmountDeduction(),
+            'percentage' => $this->calculatePercentageDeduction($cappedSalary, $payFrequency),
+            'progressive_bracket' => $this->calculateProgressiveBracketDeduction($cappedSalary, $payFrequency),
+            'salary_bracket' => $this->calculateSalaryBracketDeduction($cappedSalary, $payFrequency),
+            'flat_amount' => $this->calculateFlatAmountDeduction($payFrequency),
             default => ['employee_amount' => 0, 'employer_amount' => 0, 'calculation_details' => []]
         };
     }
@@ -102,7 +133,7 @@ class StatutoryDeductionTemplate extends Model
         return max($salary, $this->minimum_salary ?? 0);
     }
 
-    private function calculatePercentageDeduction(float $salary): array
+    private function calculatePercentageDeduction(float $salary, string $payFrequency = 'monthly'): array
     {
         $employeeAmount = $salary * $this->employee_rate;
         $employerAmount = $salary * $this->employer_rate;
@@ -119,7 +150,7 @@ class StatutoryDeductionTemplate extends Model
         ];
     }
 
-    private function calculateProgressiveBracketDeduction(float $salary): array
+    private function calculateProgressiveBracketDeduction(float $salary, string $payFrequency = 'monthly'): array
     {
         $brackets = $this->rules['brackets'] ?? [];
         $totalTax = 0;
@@ -130,6 +161,12 @@ class StatutoryDeductionTemplate extends Model
             throw new \InvalidArgumentException("Invalid brackets data: expected array, got " . gettype($brackets));
         }
 
+        // Store original salary for display
+        $originalSalary = $salary;
+        
+        // Annualize the salary for tax calculation (tax tables are annual)
+        $annualSalary = $this->annualizeSalary($salary, $payFrequency);
+
         // Sort brackets by min value to ensure proper order
         usort($brackets, function($a, $b) {
             return $a['min'] <=> $b['min'];
@@ -139,20 +176,20 @@ class StatutoryDeductionTemplate extends Model
             $bracketMin = $bracket['min'];
             $bracketMax = $bracket['max'];
             
-            // Skip if salary doesn't reach this bracket
-            if ($salary <= $bracketMin) {
+            // Skip if annual salary doesn't reach this bracket
+            if ($annualSalary <= $bracketMin) {
                 continue;
             }
             
-            // Calculate the amount of salary that falls within this bracket
+            // Calculate the amount of annual salary that falls within this bracket
             $salaryInBracket = 0;
             
             if ($bracketMax === null) {
                 // Top bracket - no upper limit
-                $salaryInBracket = $salary - $bracketMin;
+                $salaryInBracket = $annualSalary - $bracketMin;
             } else {
                 // Middle bracket - has upper limit
-                $salaryInBracket = min($salary, $bracketMax) - $bracketMin;
+                $salaryInBracket = min($annualSalary, $bracketMax) - $bracketMin;
             }
             
             // Only process if there's salary in this bracket
@@ -186,21 +223,28 @@ class StatutoryDeductionTemplate extends Model
         // Note: Secondary and tertiary rebates should only be applied based on taxpayer age
         // This would require passing age information to the calculation method
 
-        $employeeAmount = max(0, $totalTax);
-        $employerAmount = $salary * $this->employer_rate;
+        // Pro-rate the annual tax back to the pay period
+        $finalTaxAmount = max(0, $totalTax);
+        $proRatedTaxAmount = $this->proRateFromAnnual($finalTaxAmount, $payFrequency);
+        
+        $employeeAmount = $proRatedTaxAmount;
+        $employerAmount = $originalSalary * $this->employer_rate;
 
         return [
             'employee_amount' => round($employeeAmount, 2),
             'employer_amount' => round($employerAmount, 2),
             'calculation_details' => [
                 'method' => 'progressive_bracket',
-                'salary_used' => $salary,
+                'salary_used' => $originalSalary,
+                'annual_salary_used' => $annualSalary,
+                'annual_tax_calculated' => $finalTaxAmount,
+                'pay_frequency' => $payFrequency,
                 'bracket_calculations' => $details
             ]
         ];
     }
 
-    private function calculateSalaryBracketDeduction(float $salary): array
+    private function calculateSalaryBracketDeduction(float $salary, string $payFrequency = 'monthly'): array
     {
         $brackets = $this->rules['brackets'] ?? [];
         
@@ -229,7 +273,7 @@ class StatutoryDeductionTemplate extends Model
         ];
     }
 
-    private function calculateFlatAmountDeduction(): array
+    private function calculateFlatAmountDeduction(string $payFrequency = 'monthly'): array
     {
         $amount = $this->rules['amount'] ?? 0;
 

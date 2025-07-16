@@ -55,7 +55,7 @@ class StatutoryDeductionCalculator
 
         foreach ($templates as $template) {
             try {
-                $calculation = $template->calculateDeduction($grossSalary);
+                $calculation = $template->calculateDeduction($grossSalary, $employee->pay_frequency);
                 
                 $deduction = [
                     'template_uuid' => $template->uuid,
@@ -117,7 +117,7 @@ class StatutoryDeductionCalculator
         }
 
         try {
-            $calculation = $template->calculateDeduction($grossSalary);
+            $calculation = $template->calculateDeduction($grossSalary, $employee->pay_frequency);
             
             return [
                 'template_uuid' => $template->uuid,

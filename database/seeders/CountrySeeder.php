@@ -16,62 +16,6 @@ class CountrySeeder extends Seeder
     {
         $countries = [
             [
-                'iso_code' => 'US',
-                'name' => 'United States',
-                'currency_code' => 'USD',
-                'timezone' => 'America/New_York',
-                'is_supported_for_payroll' => true,
-                'is_active' => true,
-                'regulatory_framework' => [
-                    'tax_year_start' => '01-01',
-                    'tax_year_end' => '12-31',
-                    'payroll_frequency' => ['weekly', 'bi_weekly', 'monthly', 'semi_monthly'],
-                    'required_deductions' => ['federal_tax', 'state_tax', 'social_security', 'medicare'],
-                ]
-            ],
-            [
-                'iso_code' => 'CA',
-                'name' => 'Canada',
-                'currency_code' => 'CAD',
-                'timezone' => 'America/Toronto',
-                'is_supported_for_payroll' => true,
-                'is_active' => true,
-                'regulatory_framework' => [
-                    'tax_year_start' => '01-01',
-                    'tax_year_end' => '12-31',
-                    'payroll_frequency' => ['weekly', 'bi_weekly', 'monthly', 'semi_monthly'],
-                    'required_deductions' => ['federal_tax', 'provincial_tax', 'cpp', 'ei'],
-                ]
-            ],
-            [
-                'iso_code' => 'GB',
-                'name' => 'United Kingdom',
-                'currency_code' => 'GBP',
-                'timezone' => 'Europe/London',
-                'is_supported_for_payroll' => true,
-                'is_active' => true,
-                'regulatory_framework' => [
-                    'tax_year_start' => '04-06',
-                    'tax_year_end' => '04-05',
-                    'payroll_frequency' => ['weekly', 'monthly'],
-                    'required_deductions' => ['income_tax', 'national_insurance'],
-                ]
-            ],
-            [
-                'iso_code' => 'AU',
-                'name' => 'Australia',
-                'currency_code' => 'AUD',
-                'timezone' => 'Australia/Sydney',
-                'is_supported_for_payroll' => true,
-                'is_active' => true,
-                'regulatory_framework' => [
-                    'tax_year_start' => '07-01',
-                    'tax_year_end' => '06-30',
-                    'payroll_frequency' => ['weekly', 'fortnightly', 'monthly'],
-                    'required_deductions' => ['income_tax', 'superannuation'],
-                ]
-            ],
-            [
                 'iso_code' => 'ZA',
                 'name' => 'South Africa',
                 'currency_code' => 'ZAR',
@@ -86,68 +30,138 @@ class CountrySeeder extends Seeder
                 ]
             ],
             [
-                'iso_code' => 'DE',
-                'name' => 'Germany',
-                'currency_code' => 'EUR',
-                'timezone' => 'Europe/Berlin',
+                'iso_code' => 'US',
+                'name' => 'United States',
+                'currency_code' => 'USD',
+                'timezone' => 'America/New_York',
+                'is_supported_for_payroll' => true,
+                'is_active' => true,
+                'regulatory_framework' => [
+                    'tax_year_start' => '01-01',
+                    'tax_year_end' => '12-31',
+                    'payroll_frequency' => ['weekly', 'bi_weekly', 'monthly', 'semi_monthly'],
+                    'required_deductions' => ['federal_tax', 'state_tax', 'social_security', 'medicare'],
+                ]
+            ],
+
+            [
+                'iso_code' => 'GB',
+                'name' => 'United Kingdom',
+                'currency_code' => 'GBP',
+                'timezone' => 'Europe/London',
+                'is_supported_for_payroll' => true,
+                'is_active' => true,
+                'regulatory_framework' => [
+                    'tax_year_start' => '04-06',
+                    'tax_year_end' => '04-05',
+                    'payroll_frequency' => ['weekly', 'monthly'],
+                    'required_deductions' => ['income_tax', 'national_insurance'],
+                ]
+            ],
+
+            [
+                'iso_code' => 'KE',
+                'name' => 'Kenya',
+                'currency_code' => 'KES',
+                'timezone' => 'Africa/Nairobi',
+                'is_supported_for_payroll' => false,
+                'is_active' => true,
+                    'regulatory_framework' => [
+                        'tax_year_start' => '01-01',
+                        'tax_year_end' => '12-31',
+                        'payroll_frequency' => ['monthly'],
+                        'required_deductions' => [
+                            'paye',
+                            'nhif', // National Hospital Insurance Fund
+                            'nssf', // National Social Security Fund
+                            'housing_levy'
+                        ]
+                    ]
+            ],
+            [
+                'iso_code' => 'NG',
+                'name' => 'Nigeria',
+                'currency_code' => 'NGN',
+                'timezone' => 'Africa/Lagos',
                 'is_supported_for_payroll' => false,
                 'is_active' => true,
                 'regulatory_framework' => []
             ],
             [
-                'iso_code' => 'FR',
-                'name' => 'France',
-                'currency_code' => 'EUR',
-                'timezone' => 'Europe/Paris',
+                'iso_code' => 'CI',
+                'name' => 'Ivory Coast',
+                'currency_code' => 'XOF',
+                'timezone' => 'Africa/Abidjan',
                 'is_supported_for_payroll' => false,
                 'is_active' => true,
                 'regulatory_framework' => []
             ],
             [
-                'iso_code' => 'BR',
-                'name' => 'Brazil',
-                'currency_code' => 'BRL',
-                'timezone' => 'America/Sao_Paulo',
+                'iso_code' => 'GH',
+                'name' => 'Ghana',
+                'currency_code' => 'GHS',
+                'timezone' => 'Africa/Accra',
                 'is_supported_for_payroll' => false,
                 'is_active' => true,
                 'regulatory_framework' => []
             ],
             [
-                'iso_code' => 'IN',
-                'name' => 'India',
-                'currency_code' => 'INR',
-                'timezone' => 'Asia/Kolkata',
+                'iso_code' => 'BW',
+                'name' => 'Botswana',
+                'currency_code' => 'BWP',
+                'timezone' => 'Africa/Gaborone',
                 'is_supported_for_payroll' => false,
                 'is_active' => true,
                 'regulatory_framework' => []
             ],
             [
-                'iso_code' => 'JP',
-                'name' => 'Japan',
-                'currency_code' => 'JPY',
-                'timezone' => 'Asia/Tokyo',
+                'iso_code' => 'ZM',
+                'name' => 'Zambia',
+                'currency_code' => 'ZMW',
+                'timezone' => 'Africa/Lusaka',
                 'is_supported_for_payroll' => false,
                 'is_active' => true,
-                'regulatory_framework' => []
+                'regulatory_framework' => [
+                    'tax_year_start' => '01-01',
+                    'tax_year_end' => '12-31',
+                    'payroll_frequency' => ['monthly'],
+                    'required_deductions' => [
+                        'paye',
+                        'napsa', // National Pension Scheme Authority
+                        'nhima'  // National Health Insurance Management Authority
+                    ]
+                ]
+
             ],
             [
-                'iso_code' => 'SG',
-                'name' => 'Singapore',
-                'currency_code' => 'SGD',
-                'timezone' => 'Asia/Singapore',
+                'iso_code' => 'ZW',
+                'name' => 'Zimbabwe',
+                'currency_code' => 'ZWL',
+                'timezone' => 'Africa/Harare',
                 'is_supported_for_payroll' => false,
                 'is_active' => true,
-                'regulatory_framework' => []
+                'regulatory_framework' => [
+                    'tax_year_start' => '01-01',
+                    'tax_year_end' => '12-31',
+                    'payroll_frequency' => ['monthly'],
+                    'required_deductions' => [
+                        'paye', // Pay As You Earn
+                        'nssa', // National Social Security Authority
+                        'aids_levy'
+                    ]
+            ]
+
             ],
             [
-                'iso_code' => 'NL',
-                'name' => 'Netherlands',
-                'currency_code' => 'EUR',
-                'timezone' => 'Europe/Amsterdam',
+                'iso_code' => 'MU',
+                'name' => 'Mauritius',
+                'currency_code' => 'MUR',
+                'timezone' => 'Indian/Mauritius',
                 'is_supported_for_payroll' => false,
                 'is_active' => true,
                 'regulatory_framework' => []
             ],
+
         ];
 
         foreach ($countries as $countryData) {

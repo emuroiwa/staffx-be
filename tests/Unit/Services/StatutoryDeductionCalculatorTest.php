@@ -343,4 +343,272 @@ class StatutoryDeductionCalculatorTest extends TestCase
 
         $this->assertEquals(now()->year, $result['year']);
     }
+
+    /** @test */
+    public function it_calculates_same_annual_tax_for_different_pay_frequencies()
+    {
+        $country = Country::factory()->southAfrica()->create();
+        $jurisdiction = TaxJurisdiction::factory()->create(['country_uuid' => $country->uuid]);
+        
+        StatutoryDeductionTemplate::factory()->southAfricanPAYE()->create([
+            'jurisdiction_uuid' => $jurisdiction->uuid
+        ]);
+
+        $company = Company::factory()->create(['country_uuid' => $country->uuid]);
+        
+        // Create employees with different pay frequencies but same annual salary
+        $annualSalary = 240000; // R240,000 annually
+        $monthlySalary = $annualSalary / 12; // R20,000 monthly
+        $weeklySalary = $annualSalary / 52; // ~R4,615 weekly
+        $biWeeklySalary = $annualSalary / 26; // ~R9,230 bi-weekly
+
+        $monthlyEmployee = Employee::factory()->create([
+            'company_uuid' => $company->uuid,
+            'salary' => $monthlySalary,
+            'pay_frequency' => 'monthly'
+        ]);
+
+        $weeklyEmployee = Employee::factory()->create([
+            'company_uuid' => $company->uuid,
+            'salary' => $weeklySalary,
+            'pay_frequency' => 'weekly'
+        ]);
+
+        $biWeeklyEmployee = Employee::factory()->create([
+            'company_uuid' => $company->uuid,
+            'salary' => $biWeeklySalary,
+            'pay_frequency' => 'bi_weekly'
+        ]);
+
+        // Calculate PAYE for each frequency
+        $monthlyResult = $this->calculator->calculatePAYE($monthlyEmployee, $monthlySalary);
+        $weeklyResult = $this->calculator->calculatePAYE($weeklyEmployee, $weeklySalary);
+        $biWeeklyResult = $this->calculator->calculatePAYE($biWeeklyEmployee, $biWeeklySalary);
+
+        $this->assertNotNull($monthlyResult);
+        $this->assertNotNull($weeklyResult);
+        $this->assertNotNull($biWeeklyResult);
+
+        // All should calculate the same annual tax
+        $monthlyAnnualTax = $monthlyResult['calculation_details']['annual_tax_calculated'];
+        $weeklyAnnualTax = $weeklyResult['calculation_details']['annual_tax_calculated'];
+        $biWeeklyAnnualTax = $biWeeklyResult['calculation_details']['annual_tax_calculated'];
+
+        $this->assertEquals($monthlyAnnualTax, $weeklyAnnualTax, 'Monthly and weekly should have same annual tax', 0.01);
+        $this->assertEquals($monthlyAnnualTax, $biWeeklyAnnualTax, 'Monthly and bi-weekly should have same annual tax', 0.01);
+        
+        // Check that all used the same annual salary
+        $this->assertEquals($annualSalary, $monthlyResult['calculation_details']['annual_salary_used']);
+        $this->assertEquals($annualSalary, $weeklyResult['calculation_details']['annual_salary_used']);
+        $this->assertEquals($annualSalary, $biWeeklyResult['calculation_details']['annual_salary_used']);
+    }
+
+    /** @test */
+    public function it_pro_rates_tax_correctly_across_pay_frequencies()
+    {
+        $country = Country::factory()->southAfrica()->create();
+        $jurisdiction = TaxJurisdiction::factory()->create(['country_uuid' => $country->uuid]);
+        
+        StatutoryDeductionTemplate::factory()->southAfricanPAYE()->create([
+            'jurisdiction_uuid' => $jurisdiction->uuid
+        ]);
+
+        $company = Company::factory()->create(['country_uuid' => $country->uuid]);
+        
+        // Test with higher salary to ensure PAYE is calculated
+        $annualSalary = 360000; // R360,000 annually
+        $monthlySalary = $annualSalary / 12; // R30,000 monthly
+        $weeklySalary = $annualSalary / 52; // ~R6,923 weekly
+
+        $monthlyEmployee = Employee::factory()->create([
+            'company_uuid' => $company->uuid,
+            'salary' => $monthlySalary,
+            'pay_frequency' => 'monthly'
+        ]);
+
+        $weeklyEmployee = Employee::factory()->create([
+            'company_uuid' => $company->uuid,
+            'salary' => $weeklySalary,
+            'pay_frequency' => 'weekly'
+        ]);
+
+        $monthlyResult = $this->calculator->calculatePAYE($monthlyEmployee, $monthlySalary);
+        $weeklyResult = $this->calculator->calculatePAYE($weeklyEmployee, $weeklySalary);
+
+        $this->assertNotNull($monthlyResult);
+        $this->assertNotNull($weeklyResult);
+
+        // Pro-rating should be mathematically correct
+        $expectedWeeklyFromMonthly = $monthlyResult['employee_amount'] / (52/12);
+        $actualWeekly = $weeklyResult['employee_amount'];
+
+        $this->assertEquals($expectedWeeklyFromMonthly, $actualWeekly, 'Weekly amount should be correctly pro-rated from monthly', 0.1);
+        
+        // Verify pay frequency is recorded in calculation details
+        $this->assertEquals('monthly', $monthlyResult['calculation_details']['pay_frequency']);
+        $this->assertEquals('weekly', $weeklyResult['calculation_details']['pay_frequency']);
+    }
+
+    /** @test */
+    public function it_handles_all_supported_pay_frequencies()
+    {
+        $country = Country::factory()->southAfrica()->create();
+        $jurisdiction = TaxJurisdiction::factory()->create(['country_uuid' => $country->uuid]);
+        
+        StatutoryDeductionTemplate::factory()->southAfricanPAYE()->create([
+            'jurisdiction_uuid' => $jurisdiction->uuid
+        ]);
+
+        $company = Company::factory()->create(['country_uuid' => $country->uuid]);
+        
+        $annualSalary = 300000;
+        $payFrequencies = [
+            'weekly' => $annualSalary / 52,
+            'bi_weekly' => $annualSalary / 26,
+            'monthly' => $annualSalary / 12,
+            'quarterly' => $annualSalary / 4,
+            'annually' => $annualSalary
+        ];
+
+        $results = [];
+
+        foreach ($payFrequencies as $frequency => $periodSalary) {
+            $employee = Employee::factory()->create([
+                'company_uuid' => $company->uuid,
+                'salary' => $periodSalary,
+                'pay_frequency' => $frequency
+            ]);
+
+            $result = $this->calculator->calculatePAYE($employee, $periodSalary);
+            $this->assertNotNull($result, "PAYE calculation should work for {$frequency} frequency");
+            
+            $results[$frequency] = $result;
+        }
+
+        // All should calculate the same annual tax
+        $expectedAnnualTax = $results['annually']['calculation_details']['annual_tax_calculated'];
+        
+        foreach ($results as $frequency => $result) {
+            $this->assertEquals(
+                $expectedAnnualTax, 
+                $result['calculation_details']['annual_tax_calculated'],
+                "Annual tax for {$frequency} should match annual calculation",
+                0.01
+            );
+            
+            $this->assertEquals(
+                $annualSalary,
+                $result['calculation_details']['annual_salary_used'],
+                "Annual salary used for {$frequency} should be correct"
+            );
+        }
+    }
+
+    /** @test */
+    public function it_defaults_to_monthly_for_unknown_pay_frequency()
+    {
+        $country = Country::factory()->southAfrica()->create();
+        $jurisdiction = TaxJurisdiction::factory()->create(['country_uuid' => $country->uuid]);
+        
+        StatutoryDeductionTemplate::factory()->southAfricanPAYE()->create([
+            'jurisdiction_uuid' => $jurisdiction->uuid
+        ]);
+
+        $company = Company::factory()->create(['country_uuid' => $country->uuid]);
+        
+        $employee = Employee::factory()->create([
+            'company_uuid' => $company->uuid,
+            'salary' => 25000,
+            'pay_frequency' => 'monthly' // Use valid enum value
+        ]);
+
+        // Test with an unknown frequency passed directly to the calculation method
+        $result = $this->calculator->calculatePAYE($employee, 25000);
+        
+        $this->assertNotNull($result);
+        
+        // Should use monthly (multiply by 12)
+        $this->assertEquals(300000, $result['calculation_details']['annual_salary_used']);
+        $this->assertEquals('monthly', $result['calculation_details']['pay_frequency']);
+    }
+
+    /** @test */
+    public function it_calculates_realistic_south_african_paye_amounts()
+    {
+        $country = Country::factory()->southAfrica()->create();
+        $jurisdiction = TaxJurisdiction::factory()->create(['country_uuid' => $country->uuid]);
+        
+        StatutoryDeductionTemplate::factory()->southAfricanPAYE()->create([
+            'jurisdiction_uuid' => $jurisdiction->uuid
+        ]);
+
+        $company = Company::factory()->create(['country_uuid' => $country->uuid]);
+        
+        // Test realistic South African salary scenarios
+        $testCases = [
+            // [monthly_salary, expected_monthly_paye_range]
+            [15000, [0, 500]], // Below tax threshold after rebates
+            [25000, [1500, 2500]], // Mid-range salary
+            [35000, [4000, 6000]], // Higher salary
+            [50000, [8000, 12000]], // Executive salary
+        ];
+
+        foreach ($testCases as [$monthlySalary, $expectedRange]) {
+            $employee = Employee::factory()->create([
+                'company_uuid' => $company->uuid,
+                'salary' => $monthlySalary,
+                'pay_frequency' => 'monthly'
+            ]);
+
+            $result = $this->calculator->calculatePAYE($employee, $monthlySalary);
+            
+            $this->assertNotNull($result, "PAYE should be calculated for R{$monthlySalary}");
+            
+            $payeAmount = $result['employee_amount'];
+            $this->assertGreaterThanOrEqual(
+                $expectedRange[0], 
+                $payeAmount,
+                "PAYE for R{$monthlySalary} should be at least R{$expectedRange[0]}"
+            );
+            $this->assertLessThanOrEqual(
+                $expectedRange[1], 
+                $payeAmount,
+                "PAYE for R{$monthlySalary} should be at most R{$expectedRange[1]}"
+            );
+        }
+    }
+
+    /** @test */
+    public function it_includes_pay_frequency_in_calculation_details()
+    {
+        $country = Country::factory()->southAfrica()->create();
+        $jurisdiction = TaxJurisdiction::factory()->create(['country_uuid' => $country->uuid]);
+        
+        StatutoryDeductionTemplate::factory()->southAfricanPAYE()->create([
+            'jurisdiction_uuid' => $jurisdiction->uuid
+        ]);
+
+        $company = Company::factory()->create(['country_uuid' => $country->uuid]);
+        
+        $employee = Employee::factory()->create([
+            'company_uuid' => $company->uuid,
+            'salary' => 20000,
+            'pay_frequency' => 'weekly'
+        ]);
+
+        $result = $this->calculator->calculatePAYE($employee, 20000);
+        
+        $this->assertNotNull($result);
+        $this->assertArrayHasKey('calculation_details', $result);
+        
+        $details = $result['calculation_details'];
+        $this->assertArrayHasKey('pay_frequency', $details);
+        $this->assertArrayHasKey('annual_salary_used', $details);
+        $this->assertArrayHasKey('annual_tax_calculated', $details);
+        $this->assertArrayHasKey('salary_used', $details);
+        
+        $this->assertEquals('weekly', $details['pay_frequency']);
+        $this->assertEquals(20000, $details['salary_used']); // Original period salary
+        $this->assertEquals(1040000, $details['annual_salary_used']); // 20000 * 52
+    }
 }

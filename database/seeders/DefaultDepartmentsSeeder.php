@@ -20,7 +20,7 @@ class DefaultDepartmentsSeeder extends Seeder
                 'cost_center' => 'EXE-001',
                 'budget_info' => [
                     'allocation' => 500000.00,
-                    'currency' => 'USD',
+                    'currency' => 'ZAR',
                     'fiscal_year' => date('Y')
                 ]
             ],
@@ -30,7 +30,7 @@ class DefaultDepartmentsSeeder extends Seeder
                 'cost_center' => 'HR-001',
                 'budget_info' => [
                     'allocation' => 200000.00,
-                    'currency' => 'USD',
+                    'currency' => 'ZAR',
                     'fiscal_year' => date('Y')
                 ]
             ],
@@ -40,7 +40,7 @@ class DefaultDepartmentsSeeder extends Seeder
                 'cost_center' => 'FIN-001',
                 'budget_info' => [
                     'allocation' => 300000.00,
-                    'currency' => 'USD',
+                    'currency' => 'ZAR',
                     'fiscal_year' => date('Y')
                 ]
             ],
@@ -50,7 +50,7 @@ class DefaultDepartmentsSeeder extends Seeder
                 'cost_center' => 'IT-001',
                 'budget_info' => [
                     'allocation' => 800000.00,
-                    'currency' => 'USD',
+                    'currency' => 'ZAR',
                     'fiscal_year' => date('Y')
                 ]
             ],
@@ -60,7 +60,7 @@ class DefaultDepartmentsSeeder extends Seeder
                 'cost_center' => 'SAL-001',
                 'budget_info' => [
                     'allocation' => 600000.00,
-                    'currency' => 'USD',
+                    'currency' => 'ZAR',
                     'fiscal_year' => date('Y')
                 ]
             ],
@@ -70,7 +70,7 @@ class DefaultDepartmentsSeeder extends Seeder
                 'cost_center' => 'MKT-001',
                 'budget_info' => [
                     'allocation' => 400000.00,
-                    'currency' => 'USD',
+                    'currency' => 'ZAR',
                     'fiscal_year' => date('Y')
                 ]
             ],
@@ -80,7 +80,7 @@ class DefaultDepartmentsSeeder extends Seeder
                 'cost_center' => 'OPS-001',
                 'budget_info' => [
                     'allocation' => 350000.00,
-                    'currency' => 'USD',
+                    'currency' => 'ZAR',
                     'fiscal_year' => date('Y')
                 ]
             ],
@@ -90,7 +90,7 @@ class DefaultDepartmentsSeeder extends Seeder
                 'cost_center' => 'CS-001',
                 'budget_info' => [
                     'allocation' => 250000.00,
-                    'currency' => 'USD',
+                    'currency' => 'ZAR',
                     'fiscal_year' => date('Y')
                 ]
             ],
@@ -100,7 +100,7 @@ class DefaultDepartmentsSeeder extends Seeder
                 'cost_center' => 'RD-001',
                 'budget_info' => [
                     'allocation' => 700000.00,
-                    'currency' => 'USD',
+                    'currency' => 'ZAR',
                     'fiscal_year' => date('Y')
                 ]
             ],
@@ -110,7 +110,7 @@ class DefaultDepartmentsSeeder extends Seeder
                 'cost_center' => 'ADM-001',
                 'budget_info' => [
                     'allocation' => 150000.00,
-                    'currency' => 'USD',
+                    'currency' => 'ZAR',
                     'fiscal_year' => date('Y')
                 ]
             ]
@@ -122,7 +122,7 @@ class DefaultDepartmentsSeeder extends Seeder
         foreach ($companies as $company) {
             foreach ($defaultDepartments as $departmentData) {
                 // Adjust budget currency based on company settings
-                $departmentData['budget_info']['currency'] = $company->getSetting('default_currency', 'USD');
+                $departmentData['budget_info']['currency'] = $company->getSetting('default_currency', 'ZAR');
                 
                 Department::create(array_merge($departmentData, [
                     'company_uuid' => $company->uuid,
