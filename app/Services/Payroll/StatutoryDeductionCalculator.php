@@ -6,6 +6,7 @@ use App\Models\Employee;
 use App\Models\Country;
 use App\Models\TaxJurisdiction;
 use App\Models\StatutoryDeductionTemplate;
+use App\Models\CompanyStatutoryDeductionConfiguration;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
@@ -18,7 +19,8 @@ class StatutoryDeductionCalculator
     public function calculateForEmployee(
         Employee $employee, 
         float $grossSalary, 
-        Carbon $payrollDate = null
+        Carbon $payrollDate = null,
+        bool $includeEmployerPaidTaxableBenefits = false
     ): array {
         $payrollDate = $payrollDate ?? now();
         
@@ -29,6 +31,7 @@ class StatutoryDeductionCalculator
                 'total_employee_deductions' => 0,
                 'total_employer_contributions' => 0,
                 'deductions' => [],
+                'taxable_benefits' => [],
                 'errors' => ['Country not supported for payroll processing']
             ];
         }
@@ -39,6 +42,7 @@ class StatutoryDeductionCalculator
                 'total_employee_deductions' => 0,
                 'total_employer_contributions' => 0,
                 'deductions' => [],
+                'taxable_benefits' => [],
                 'errors' => ['No active tax jurisdiction found for country']
             ];
         }
@@ -50,12 +54,16 @@ class StatutoryDeductionCalculator
             'total_employee_deductions' => 0,
             'total_employer_contributions' => 0,
             'deductions' => [],
+            'taxable_benefits' => [],
             'errors' => []
         ];
 
+        // Track taxable benefits for tax calculation
+        $taxableBenefitAmount = 0;
+
         foreach ($templates as $template) {
             try {
-                $calculation = $template->calculateDeduction($grossSalary, $employee->pay_frequency);
+                $calculation = $this->calculateTemplateDeduction($employee, $template, $grossSalary, $payrollDate);
                 
                 $deduction = [
                     'template_uuid' => $template->uuid,
@@ -64,12 +72,25 @@ class StatutoryDeductionCalculator
                     'type' => $template->deduction_type,
                     'employee_amount' => $calculation['employee_amount'],
                     'employer_amount' => $calculation['employer_amount'],
+                    'paid_by' => $calculation['employer_covers_employee_portion'] ? 'employer' : 'employee',
+                    'is_taxable' => $calculation['is_taxable_if_employer_paid'] ?? false,
                     'calculation_details' => $calculation['calculation_details']
                 ];
 
                 $results['deductions'][] = $deduction;
                 $results['total_employee_deductions'] += $calculation['employee_amount'];
                 $results['total_employer_contributions'] += $calculation['employer_amount'];
+
+                // Track taxable benefits if employer pays and it's taxable
+                if ($calculation['employer_covers_employee_portion'] && $calculation['is_taxable_if_employer_paid']) {
+                    $taxableBenefitAmount += $calculation['original_employee_amount'] ?? $calculation['employee_amount'];
+                    $results['taxable_benefits'][] = [
+                        'name' => $template->name,
+                        'code' => $template->code,
+                        'amount' => $calculation['original_employee_amount'] ?? $calculation['employee_amount'],
+                        'reason' => 'employer_paid_deduction'
+                    ];
+                }
 
             } catch (\Exception $e) {
                 Log::error("Error calculating statutory deduction for template {$template->code}", [
@@ -80,6 +101,11 @@ class StatutoryDeductionCalculator
                 
                 $results['errors'][] = "Failed to calculate {$template->name}: {$e->getMessage()}";
             }
+        }
+
+        // If we need to include taxable benefits, recalculate PAYE with adjusted gross
+        if ($includeEmployerPaidTaxableBenefits && $taxableBenefitAmount > 0) {
+            $results = $this->recalculateWithTaxableBenefits($employee, $results, $grossSalary, $taxableBenefitAmount, $payrollDate);
         }
 
         return $results;
@@ -270,6 +296,100 @@ class StatutoryDeductionCalculator
         }
 
         return null;
+    }
+
+    /**
+     * Calculate deduction for a specific template considering company configuration.
+     */
+    private function calculateTemplateDeduction(
+        Employee $employee, 
+        StatutoryDeductionTemplate $template, 
+        float $grossSalary, 
+        Carbon $payrollDate
+    ): array {
+        // Check if company has specific configuration for this template
+        $companyUuid = $employee->company_uuid ?? $employee->company?->uuid;
+        if ($companyUuid) {
+            $companyConfig = CompanyStatutoryDeductionConfiguration::forCompany($companyUuid)
+                ->where('statutory_deduction_template_uuid', $template->uuid)
+                ->active()
+                ->effectiveAt($payrollDate)
+                ->first();
+        } else {
+            $companyConfig = null;
+        }
+
+        if ($companyConfig) {
+            // Use company-specific configuration
+            $payFrequency = $employee->pay_frequency ?? 'monthly';
+            $calculation = $companyConfig->calculateDeduction($grossSalary, $payFrequency);
+            
+            // Store original employee amount for taxable benefit calculation
+            if ($calculation['employer_covers_employee_portion']) {
+                $originalCalculation = $template->calculateDeduction($grossSalary, $payFrequency);
+                $calculation['original_employee_amount'] = $originalCalculation['employee_amount'];
+            }
+            
+            return $calculation;
+        }
+
+        // Use template default configuration
+        $payFrequency = $employee->pay_frequency ?? 'monthly';
+        $calculation = $template->calculateDeduction($grossSalary, $payFrequency);
+        
+        // Add company configuration flags with defaults
+        $calculation['employer_covers_employee_portion'] = $template->employer_covers_employee_portion;
+        $calculation['is_taxable_if_employer_paid'] = $template->is_taxable_if_employer_paid;
+        
+        return $calculation;
+    }
+
+    /**
+     * Recalculate PAYE with taxable benefits included.
+     */
+    private function recalculateWithTaxableBenefits(
+        Employee $employee,
+        array $results,
+        float $originalGrossSalary,
+        float $taxableBenefitAmount,
+        Carbon $payrollDate
+    ): array {
+        // Find PAYE deduction in results
+        $payeIndex = null;
+        foreach ($results['deductions'] as $index => $deduction) {
+            if ($deduction['type'] === 'income_tax' || $deduction['code'] === 'PAYE') {
+                $payeIndex = $index;
+                break;
+            }
+        }
+
+        if ($payeIndex === null) {
+            return $results; // No PAYE found, return as is
+        }
+
+        // Recalculate PAYE with adjusted gross salary
+        $adjustedGrossSalary = $originalGrossSalary + $taxableBenefitAmount;
+        $newPayeCalculation = $this->calculatePAYE($employee, $adjustedGrossSalary, $payrollDate);
+
+        if ($newPayeCalculation) {
+            // Update totals
+            $results['total_employee_deductions'] -= $results['deductions'][$payeIndex]['employee_amount'];
+            $results['total_employer_contributions'] -= $results['deductions'][$payeIndex]['employer_amount'];
+            
+            // Update PAYE deduction
+            $results['deductions'][$payeIndex]['employee_amount'] = $newPayeCalculation['employee_amount'];
+            $results['deductions'][$payeIndex]['employer_amount'] = $newPayeCalculation['employer_amount'];
+            $results['deductions'][$payeIndex]['calculation_details'] = array_merge(
+                $newPayeCalculation['calculation_details'],
+                ['taxable_benefits_included' => $taxableBenefitAmount, 'adjusted_gross_salary' => $adjustedGrossSalary]
+            );
+            
+            // Update totals with new amounts
+            $results['total_employee_deductions'] += $newPayeCalculation['employee_amount'];
+            $results['total_employer_contributions'] += $newPayeCalculation['employer_amount'];
+        }
+
+        return $results;
     }
 
     /**

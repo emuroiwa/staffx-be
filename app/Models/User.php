@@ -335,4 +335,125 @@ class User extends Authenticatable implements JWTSubject, MustVerifyEmail
     {
         return in_array($permission, $this->getPermissions());
     }
+
+    /**
+     * Check if user has a specific role.
+     */
+    public function hasRole(string $role): bool
+    {
+        return $this->role === $role;
+    }
+
+    /**
+     * Check if user has any of the specified roles.
+     */
+    public function hasAnyRole(array $roles): bool
+    {
+        return in_array($this->role, $roles);
+    }
+
+    /**
+     * Check if user has all of the specified roles.
+     * Note: Since a user can only have one role at a time, this will only return true
+     * if exactly one role is provided and the user has that role.
+     */
+    public function hasAllRoles(array $roles): bool
+    {
+        return count($roles) === 1 && $this->hasRole($roles[0]);
+    }
+
+    /**
+     * Get all available roles in the system.
+     */
+    public static function getAvailableRoles(): array
+    {
+        return [
+            'holding_company_admin' => 'Holding Company Admin',
+            'admin' => 'Company Admin',
+            'manager' => 'Manager',
+            'hr' => 'HR',
+            'employee' => 'Employee'
+        ];
+    }
+
+    /**
+     * Get the display name for the user's role.
+     */
+    public function getRoleDisplayName(): string
+    {
+        $roles = self::getAvailableRoles();
+        return $roles[$this->role] ?? ucfirst($this->role);
+    }
+
+    /**
+     * Check if user is an employee (basic user role).
+     */
+    public function isEmployee(): bool
+    {
+        return $this->role === 'employee';
+    }
+
+    /**
+     * Check if user can approve payroll items.
+     */
+    public function canApprovePayroll(): bool
+    {
+        return in_array($this->role, ['admin', 'hr']);
+    }
+
+    /**
+     * Check if user can manage garnishments.
+     */
+    public function canManageGarnishments(): bool
+    {
+        return in_array($this->role, ['admin', 'hr']);
+    }
+
+    /**
+     * Check if user can view sensitive employee data.
+     */
+    public function canViewSensitiveData(): bool
+    {
+        return in_array($this->role, ['admin', 'hr']);
+    }
+
+    /**
+     * Check if user has administrative privileges.
+     */
+    public function isAdmin(): bool
+    {
+        return in_array($this->role, ['holding_company_admin', 'admin']);
+    }
+
+    /**
+     * Get user's role level (higher number = more permissions).
+     */
+    public function getRoleLevel(): int
+    {
+        return match($this->role) {
+            'holding_company_admin' => 5,
+            'admin' => 4,
+            'hr' => 3,
+            'manager' => 2,
+            'employee' => 1,
+            default => 0
+        };
+    }
+
+    /**
+     * Check if user has higher role level than specified role.
+     */
+    public function hasHigherRoleThan(string $role): bool
+    {
+        $userWithRole = new self(['role' => $role]);
+        return $this->getRoleLevel() > $userWithRole->getRoleLevel();
+    }
+
+    /**
+     * Check if user can manage another user based on role hierarchy.
+     */
+    public function canManageUser(User $user): bool
+    {
+        return $this->getRoleLevel() > $user->getRoleLevel();
+    }
 }

@@ -41,11 +41,12 @@ class PayrollCalculationService
         // Get employee-specific payroll items
         $employeeItems = $this->getEmployeePayrollItems($employee, $payrollPeriodStart);
         
-        // Calculate statutory deductions
+        // Calculate statutory deductions with taxable benefits consideration
         $statutoryResult = $this->statutoryCalculator->calculateForEmployee(
             $employee, 
             $grossSalary, 
-            $payrollPeriodStart
+            $payrollPeriodStart,
+            true // Include employer-paid taxable benefits in calculation
         );
 
         // Calculate disposable income for garnishments
@@ -90,6 +91,9 @@ class PayrollCalculationService
                     'statutory' => $statutoryResult['deductions'],
                     'employee' => $employeeItems['deductions']->toArray(),
                     'garnishments' => $garnishmentResult['garnishments']
+                ],
+                'employer_contributions' => [
+                    'company' => $companyItems['employer_contributions']->toArray()
                 ]
             ],
             'calculation_date' => now(),
@@ -304,6 +308,7 @@ class PayrollCalculationService
 
         $allowances = collect();
         $deductions = collect();
+        $employerContributions = collect();
 
         foreach ($templates as $template) {
             $calculation = $template->calculateForEmployee($employee, $date);
@@ -319,6 +324,8 @@ class PayrollCalculationService
 
             if ($template->type === 'allowance') {
                 $allowances->push($item);
+            } else if ($template->type === 'employer_contribution') {
+                $employerContributions->push($item);
             } else {
                 $deductions->push($item);
             }
@@ -326,7 +333,8 @@ class PayrollCalculationService
 
         return [
             'allowances' => $allowances,
-            'deductions' => $deductions
+            'deductions' => $deductions,
+            'employer_contributions' => $employerContributions
         ];
     }
 

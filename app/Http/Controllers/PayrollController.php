@@ -619,4 +619,195 @@ class PayrollController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Get comprehensive payroll data for an employee (company templates + employee items + statutory).
+     */
+    public function getEmployeePayrollData(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'employee_uuid' => 'required|string|exists:employees,uuid',
+            'payroll_date' => 'sometimes|date',
+            'gross_salary' => 'sometimes|numeric|min:0'
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        try {
+            $company = Auth::user()->company;
+            if (!$company) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User must belong to a company'
+                ], 403);
+            }
+
+            // Get employee and verify company access
+            $employee = Employee::where('uuid', $request->employee_uuid)
+                ->where('company_uuid', $company->uuid)
+                ->first();
+
+            if (!$employee) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Employee not found or does not belong to your company'
+                ], 404);
+            }
+
+            $payrollDate = $request->payroll_date ? Carbon::parse($request->payroll_date) : now();
+            $grossSalary = $request->gross_salary ?? $employee->salary;
+
+            // Use PayrollCalculationService to get all payroll data
+            $payrollService = new \App\Services\Payroll\PayrollCalculationService(
+                new \App\Services\Payroll\StatutoryDeductionCalculator()
+            );
+
+            // Calculate comprehensive payroll data
+            $payrollData = $payrollService->calculateEmployeePayroll(
+                $employee,
+                $payrollDate->startOfMonth(),
+                $payrollDate->endOfMonth()
+            );
+
+
+
+            // Transform the data to match frontend expectations
+            $transformedData = [
+                'employee_uuid' => $employee->uuid,
+                'payroll_date' => $payrollDate->format('Y-m-d'),
+                'gross_salary' => $grossSalary,
+                'payroll_items' => $this->transformPayrollItems($payrollData['payroll_items']),
+                'statutory_deductions' => $payrollData['payroll_items']['deductions']['statutory'] ?? [],
+                'summary' => [
+                    'basic_salary' => $payrollData['basic_salary'],
+                    'gross_salary' => $payrollData['gross_salary'],
+                    'total_allowances' => $payrollData['total_allowances'],
+                    'total_deductions' => $payrollData['total_deductions'],
+                    'total_statutory_deductions' => $payrollData['total_statutory_deductions'],
+                    'total_garnishments' => $payrollData['total_garnishments'] ?? 0,
+                    'total_employer_contributions' => $payrollData['total_employer_contributions'],
+                    'disposable_income' => $payrollData['disposable_income'] ?? 0,
+                    'net_salary' => $payrollData['net_salary']
+                ]
+            ];
+
+            return response()->json([
+                'success' => true,
+                'data' => $transformedData,
+                'message' => 'Employee payroll data retrieved successfully'
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retrieve employee payroll data: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Transform payroll items for frontend consumption.
+     */
+    private function transformPayrollItems(array $payrollItems): array
+    {
+        $transformed = [];
+        Log::info('Transforming payroll items', ['payrollItems' => $payrollItems]);
+
+        // Company allowances
+        foreach ($payrollItems['allowances']['company'] ?? [] as $item) {
+            $transformed[] = [
+                'uuid' => $item['template_uuid'],
+                'code' => $item['code'] ?? '',
+                'name' => $item['name'] ?? '',
+                'type' => $item['type'] ?? 'allowance',
+                'amount' => $item['amount'] ?? 0,
+                'calculated_amount' => $item['amount'] ?? 0,
+                'source' => 'company_template',
+                'status' => 'active'
+            ];
+        }
+
+        // Employee allowances
+        foreach ($payrollItems['allowances']['employee'] ?? [] as $item) {
+            $transformed[] = [
+                'uuid' => $item['item_uuid'] ?? '',
+                'code' => $item['code'] ?? '',
+                'name' => $item['name'] ?? '',
+                'type' => $item['type'] ?? 'allowance',
+                'amount' => $item['amount'] ?? 0,
+                'calculated_amount' => $item['amount'] ?? 0,
+                'calculation_method' => $item['calculation_method'],
+                'source' => 'employee_specific',
+                'status' => 'active'
+            ];
+        }
+
+        // Company deductions
+        foreach ($payrollItems['deductions']['company'] ?? [] as $item) {
+            $transformed[] = [
+                'uuid' => $item['template_uuid'],
+                'code' => $item['code'] ?? '',
+                'name' => $item['name'] ?? '',
+                'type' => $item['type'] ?? 'deduction',
+                'amount' => $item['amount'] ?? 0,
+                'calculated_amount' => $item['amount'] ?? 0,
+                'source' => 'company_template',
+                'status' => 'active'
+            ];
+        }
+
+        // Employee deductions
+        foreach ($payrollItems['deductions']['employee'] ?? [] as $item) {
+            $transformed[] = [
+                'uuid' => $item['item_uuid'] ?? '',
+                'code' => $item['code'] ?? '',
+                'name' => $item['name'] ??  '',
+                'type' => $item['type'] ?? 'deduction',
+                'amount' => $item['amount'] ?? 0,
+                'calculated_amount' => $item['amount'] ?? 0,
+                'calculation_method' => $item['calculation_method'],
+                'source' => 'employee_specific',
+                'status' => 'active'
+            ];
+        }
+
+        // Garnishments
+        foreach ($payrollItems['deductions']['garnishments'] ?? [] as $item) {
+            $transformed[] = [
+                'uuid' => $item['uuid'] ?? '',
+                'code' => $item['name'] ?? '', // Using name as code for garnishments
+                'name' => $item['name'] ?? '',
+                'type' => 'garnishment',
+                'amount' => $item['amount'] ?? 0,
+                'calculated_amount' => $item['amount'] ?? 0,
+                'priority_order' => $item['priority'],
+                'court_order_number' => $item['court_order'],
+                'garnishment_authority' => $item['authority'],
+                'source' => 'garnishment',
+                'status' => $item['status']
+            ];
+        }
+        
+        // Employer contributions
+        foreach ($payrollItems['employer_contributions']['company'] ?? [] as $item) {
+            $transformed[] = [
+                'uuid' => $item['template_uuid'] ?? $item['item_uuid'] ?? '',
+                'code' => $item['code'] ?? '',
+                'name' => $item['name'] ?? '',
+                'type' => 'employer_contribution',
+                'amount' => $item['amount'] ?? 0,
+                'calculated_amount' => $item['amount'] ?? 0,
+                'source' => isset($item['template_uuid']) ? 'company_template' : 'employee_specific',
+                'status' => 'active'
+            ];
+        }
+
+        return $transformed;
+    }
 }

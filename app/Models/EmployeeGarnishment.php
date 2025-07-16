@@ -248,4 +248,103 @@ class EmployeeGarnishment extends EmployeePayrollItem
             'manual' => 'Manual Entry'
         ];
     }
+
+    /**
+     * Calculate maximum allowable garnishment amount based on legal limits
+     */
+    public function calculateMaxAllowableGarnishment(float $disposableIncome): float
+    {
+        // Validate that this is actually a garnishment
+        if ($this->type !== 'garnishment') {
+            throw new \InvalidArgumentException('Method can only be called on garnishment items');
+        }
+
+        // Use custom maximum percentage if set
+        if ($this->maximum_percentage > 0) {
+            return $disposableIncome * ($this->maximum_percentage / 100);
+        }
+
+        // Default legal limits based on garnishment type
+        $legalLimits = [
+            'wage_garnishment' => 0.25, // 25% of disposable income
+            'child_support' => 0.50,    // Up to 50% for child support (can be higher with multiple orders)
+            'tax_levy' => 0.15,         // 15% for tax levies (IRS guidelines)
+            'student_loan' => 0.15,     // 15% for federal student loans
+            'bankruptcy' => 0.25,       // 25% for bankruptcy court orders
+            'other' => 0.25            // Default 25% for other types
+        ];
+
+        $limit = $legalLimits[$this->garnishment_type] ?? 0.25;
+        $maxAmount = $disposableIncome * $limit;
+
+        // Additional validation for child support - can be higher in some cases
+        if ($this->garnishment_type === 'child_support') {
+            // If employee supports another spouse/child, limit is 50%
+            // If no other dependents, limit can be up to 60%
+            // For this implementation, we'll use the configured percentage or 50% default
+            $maxAmount = $disposableIncome * min(($this->maximum_percentage ?: 50) / 100, 0.60);
+        }
+
+        return round($maxAmount, 2);
+    }
+
+    /**
+     * Get detailed garnishment calculation breakdown
+     */
+    public function getCalculationBreakdown(float $disposableIncome): array
+    {
+        $maxAllowable = $this->calculateMaxAllowableGarnishment($disposableIncome);
+        
+        $calculatedAmount = match($this->calculation_method) {
+            'fixed_amount' => $this->amount ?? 0,
+            'percentage_of_salary' => ($disposableIncome * ($this->percentage / 100)),
+            'percentage_of_basic' => ($this->employee->salary * ($this->percentage / 100)),
+            'formula' => $this->evaluateFormula($disposableIncome),
+            'manual' => $this->amount ?? 0
+        };
+
+        $finalAmount = min($calculatedAmount, $maxAllowable);
+
+        // Check remaining amount if total is set
+        if ($this->total_amount_to_garnish > 0) {
+            $remainingAmount = $this->total_amount_to_garnish - $this->amount_garnished_to_date;
+            $finalAmount = min($finalAmount, $remainingAmount);
+        }
+
+        return [
+            'disposable_income' => $disposableIncome,
+            'calculated_amount' => $calculatedAmount,
+            'max_allowable_amount' => $maxAllowable,
+            'final_amount' => max(0, $finalAmount),
+            'garnishment_type' => $this->garnishment_type,
+            'calculation_method' => $this->calculation_method,
+            'percentage_used' => $disposableIncome > 0 ? (max(0, $finalAmount) / $disposableIncome) * 100 : 0,
+            'legal_limit_percentage' => $this->getLegalLimitPercentage(),
+            'remaining_total' => $this->getRemainingGarnishmentAmount(),
+            'is_limited_by_legal' => $calculatedAmount > $maxAllowable,
+            'is_limited_by_remaining' => $this->total_amount_to_garnish > 0 && 
+                                       $calculatedAmount > ($this->total_amount_to_garnish - $this->amount_garnished_to_date)
+        ];
+    }
+
+    /**
+     * Get the legal limit percentage for this garnishment type
+     */
+    public function getLegalLimitPercentage(): float
+    {
+        if ($this->maximum_percentage > 0) {
+            return $this->maximum_percentage;
+        }
+
+        $legalLimits = [
+            'wage_garnishment' => 25.0,
+            'child_support' => 50.0,
+            'tax_levy' => 15.0,
+            'student_loan' => 15.0,
+            'bankruptcy' => 25.0,
+            'other' => 25.0
+        ];
+
+        return $legalLimits[$this->garnishment_type] ?? 25.0;
+    }
 }

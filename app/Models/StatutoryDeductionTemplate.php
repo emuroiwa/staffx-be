@@ -30,7 +30,11 @@ class StatutoryDeductionTemplate extends Model
         'effective_from',
         'effective_to',
         'is_mandatory',
-        'is_active'
+        'is_active',
+        'is_employer_payable',
+        'employer_covers_employee_portion',
+        'is_taxable_if_employer_paid',
+        'country_uuid'
     ];
 
     protected $casts = [
@@ -42,7 +46,10 @@ class StatutoryDeductionTemplate extends Model
         'effective_from' => 'datetime',
         'effective_to' => 'datetime',
         'is_mandatory' => 'boolean',
-        'is_active' => 'boolean'
+        'is_active' => 'boolean',
+        'is_employer_payable' => 'boolean',
+        'employer_covers_employee_portion' => 'boolean',
+        'is_taxable_if_employer_paid' => 'boolean'
     ];
 
     /**

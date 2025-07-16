@@ -10,6 +10,7 @@ use App\Http\Controllers\PayrollController;
 use App\Http\Controllers\CompanyPayrollTemplateController;
 use App\Http\Controllers\EmployeePayrollItemController;
 use App\Http\Controllers\GarnishmentController;
+use App\Http\Controllers\CompanyStatutoryDeductionController;
 use App\Http\Controllers\Api\CompanyController;
 use App\Http\Controllers\Api\CurrencyController;
 use Illuminate\Http\Request;
@@ -248,6 +249,9 @@ Route::middleware(['auth:api', 'company.context'])->group(function () {
         
         Route::post('/generate-payslip', [PayrollController::class, 'generatePayslip'])
             ->middleware('permission:manage_payroll');
+        
+        Route::get('/employee-payroll-data', [PayrollController::class, 'getEmployeePayrollData'])
+            ->middleware('permission:manage_payroll');
     });
     
     // Company Payroll Template routes
@@ -324,6 +328,33 @@ Route::middleware(['auth:api', 'company.context'])->group(function () {
             ->middleware('permission:manage_payroll');
         
         Route::delete('/', [GarnishmentController::class, 'destroy'])
+            ->middleware('permission:manage_payroll');
+    });
+
+    // Company Statutory Deduction Configuration routes
+    Route::prefix('statutory-deduction-configurations')->group(function () {
+        Route::get('/', [CompanyStatutoryDeductionController::class, 'index'])
+            ->middleware('permission:manage_payroll');
+        
+        Route::get('/available-templates', [CompanyStatutoryDeductionController::class, 'getAvailableTemplates'])
+            ->middleware('permission:manage_payroll');
+        
+        Route::post('/', [CompanyStatutoryDeductionController::class, 'store'])
+            ->middleware('permission:manage_payroll');
+        
+        Route::get('/{uuid}', [CompanyStatutoryDeductionController::class, 'show'])
+            ->middleware('permission:manage_payroll');
+        
+        Route::put('/{uuid}', [CompanyStatutoryDeductionController::class, 'update'])
+            ->middleware('permission:manage_payroll');
+        
+        Route::delete('/{uuid}', [CompanyStatutoryDeductionController::class, 'destroy'])
+            ->middleware('permission:manage_payroll');
+        
+        Route::post('/{uuid}/toggle-status', [CompanyStatutoryDeductionController::class, 'toggleStatus'])
+            ->middleware('permission:manage_payroll');
+        
+        Route::post('/{uuid}/preview-calculation', [CompanyStatutoryDeductionController::class, 'previewCalculation'])
             ->middleware('permission:manage_payroll');
     });
 });
