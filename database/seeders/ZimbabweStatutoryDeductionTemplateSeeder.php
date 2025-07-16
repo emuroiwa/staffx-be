@@ -2,15 +2,44 @@
 
 namespace Database\Seeders;
 
+use App\Models\Country;
 use App\Models\StatutoryDeductionTemplate;
 use App\Models\TaxJurisdiction;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\DB;
+use Carbon\Carbon;
 
 class ZimbabweStatutoryDeductionTemplateSeeder extends Seeder
 {
     public function run(): void
     {
+        $uuid = Str::uuid()->toString();
+        $now = Carbon::now();
+        $zim = Country::where('iso_code', 'ZW')->first();
+        DB::table('tax_jurisdictions')->insert([
+            'uuid' => $uuid,
+            'country_uuid' => $zim->uuid,
+            'region_code' => 'ZW', // ISO code for Zimbabwe
+            'name' => 'Zimbabwe - National',
+            'tax_year_start' => '2025-01-01',
+            'tax_year_end' => '2025-12-31',
+            'regulatory_authority' => 'Zimbabwe Revenue Authority (ZIMRA)',
+            'effective_from' => '2025-01-01 00:00:00',
+            'effective_to' => null,
+            'settings' => json_encode([
+                'provincial_taxes' => [
+                    'enabled' => false,
+                    'description' => 'Zimbabwe currently has no provincial income taxes'
+                ],
+                'additional_compliance' => [
+                    'provincial_registration' => false
+                ]
+            ]),
+            'is_active' => true,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
         $jurisdiction = TaxJurisdiction::where('name', 'Zimbabwe - National')->first();
 
         if (!$jurisdiction) {

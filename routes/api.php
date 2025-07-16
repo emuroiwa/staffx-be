@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\Employee\DepartmentController;
 use App\Http\Controllers\PayrollController;
 use App\Http\Controllers\CompanyPayrollTemplateController;
 use App\Http\Controllers\EmployeePayrollItemController;
+use App\Http\Controllers\GarnishmentController;
 use App\Http\Controllers\Api\CompanyController;
 use App\Http\Controllers\Api\CurrencyController;
 use Illuminate\Http\Request;
@@ -290,6 +291,39 @@ Route::middleware(['auth:api', 'company.context'])->group(function () {
             ->middleware('permission:manage_payroll');
         
         Route::post('/{item}/calculate-preview', [EmployeePayrollItemController::class, 'calculatePreview'])
+            ->middleware('permission:manage_payroll');
+    });
+    
+    // Garnishment routes
+    Route::prefix('garnishments')->group(function () {
+        Route::get('/options', [GarnishmentController::class, 'getOptions'])
+            ->middleware('permission:manage_payroll');
+    });
+    
+    // Employee-specific garnishment routes
+    Route::prefix('employees/{employee_uuid}/garnishments')->group(function () {
+        Route::get('/', [GarnishmentController::class, 'index'])
+            ->middleware('permission:manage_payroll');
+        
+        Route::post('/', [GarnishmentController::class, 'store'])
+            ->middleware('permission:manage_payroll');
+        
+        Route::get('/history', [GarnishmentController::class, 'history'])
+            ->middleware('permission:manage_payroll');
+        
+        Route::post('/calculate-preview', [GarnishmentController::class, 'calculatePreview'])
+            ->middleware('permission:manage_payroll');
+    });
+    
+    // Individual garnishment routes
+    Route::prefix('garnishments/{garnishment_uuid}')->group(function () {
+        Route::get('/', [GarnishmentController::class, 'show'])
+            ->middleware('permission:manage_payroll');
+        
+        Route::put('/', [GarnishmentController::class, 'update'])
+            ->middleware('permission:manage_payroll');
+        
+        Route::delete('/', [GarnishmentController::class, 'destroy'])
             ->middleware('permission:manage_payroll');
     });
 });

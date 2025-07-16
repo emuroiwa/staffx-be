@@ -36,7 +36,19 @@ class EmployeePayrollItem extends Model
         'status',
         'approved_by',
         'approved_at',
-        'notes'
+        'notes',
+        // Garnishment fields
+        'court_order_number',
+        'garnishment_type',
+        'garnishment_authority',
+        'maximum_percentage',
+        'priority_order',
+        'contact_information',
+        'legal_reference',
+        'garnishment_start_date',
+        'garnishment_end_date',
+        'total_amount_to_garnish',
+        'amount_garnished_to_date'
     ];
 
     protected $casts = [
@@ -45,7 +57,15 @@ class EmployeePayrollItem extends Model
         'effective_from' => 'date',
         'effective_to' => 'date',
         'is_recurring' => 'boolean',
-        'approved_at' => 'datetime'
+        'approved_at' => 'datetime',
+        // Garnishment field casts
+        'maximum_percentage' => 'decimal:2',
+        'priority_order' => 'integer',
+        'contact_information' => 'array',
+        'garnishment_start_date' => 'date',
+        'garnishment_end_date' => 'date',
+        'total_amount_to_garnish' => 'decimal:2',
+        'amount_garnished_to_date' => 'decimal:2'
     ];
 
     /**
@@ -265,5 +285,133 @@ class EmployeePayrollItem extends Model
     public function scopeForEmployee($query, string $employeeUuid)
     {
         return $query->where('employee_uuid', $employeeUuid);
+    }
+
+    public function scopeGarnishments($query)
+    {
+        return $query->where('type', 'garnishment');
+    }
+
+    public function scopeByPriority($query)
+    {
+        return $query->orderBy('priority_order', 'asc');
+    }
+
+    // Garnishment-specific methods
+    public function isGarnishment(): bool
+    {
+        return $this->type === 'garnishment';
+    }
+
+    public function calculateGarnishmentAmount(float $disposableIncome, Carbon $payrollDate = null): float
+    {
+        if (!$this->isGarnishment()) {
+            return 0;
+        }
+
+        $payrollDate = $payrollDate ?? now();
+
+        // Check if garnishment is effective for this payroll period
+        if (!$this->isEffectiveForGarnishment($payrollDate)) {
+            return 0;
+        }
+
+        // Calculate maximum allowable garnishment
+        $maxAllowableAmount = $this->calculateMaxAllowableGarnishment($disposableIncome);
+        
+        // Get the calculated amount based on calculation method
+        $calculatedAmount = match($this->calculation_method) {
+            'fixed_amount' => $this->amount ?? 0,
+            'percentage_of_salary' => ($disposableIncome * ($this->percentage / 100)),
+            'percentage_of_basic' => ($this->employee->salary * ($this->percentage / 100)),
+            'formula' => $this->evaluateFormula($disposableIncome),
+            'manual' => $this->amount ?? 0
+        };
+
+        // Apply the lesser of calculated amount or maximum allowable
+        $garnishmentAmount = min($calculatedAmount, $maxAllowableAmount);
+
+        // Check if we've reached the total amount to garnish
+        if ($this->total_amount_to_garnish > 0) {
+            $remainingAmount = $this->total_amount_to_garnish - $this->amount_garnished_to_date;
+            $garnishmentAmount = min($garnishmentAmount, $remainingAmount);
+        }
+
+        return max(0, $garnishmentAmount);
+    }
+
+    protected function calculateMaxAllowableGarnishment(float $disposableIncome): float
+    {
+        if ($this->maximum_percentage > 0) {
+            return $disposableIncome * ($this->maximum_percentage / 100);
+        }
+
+        // Default legal limits based on garnishment type
+        $legalLimits = [
+            'wage_garnishment' => 0.25, // 25% of disposable income
+            'child_support' => 0.50,    // Up to 50% for child support
+            'tax_levy' => 0.15,         // 15% for tax levies
+            'student_loan' => 0.15,     // 15% for student loans
+            'bankruptcy' => 0.25,       // 25% for bankruptcy
+            'other' => 0.25            // Default 25%
+        ];
+
+        $limit = $legalLimits[$this->garnishment_type] ?? 0.25;
+        return $disposableIncome * $limit;
+    }
+
+    protected function isEffectiveForGarnishment(Carbon $date): bool
+    {
+        if ($this->garnishment_start_date && $date->lt($this->garnishment_start_date)) {
+            return false;
+        }
+
+        if ($this->garnishment_end_date && $date->gt($this->garnishment_end_date)) {
+            return false;
+        }
+
+        // Check if total amount has been garnished
+        if ($this->total_amount_to_garnish > 0 && 
+            $this->amount_garnished_to_date >= $this->total_amount_to_garnish) {
+            return false;
+        }
+
+        return $this->status === 'active';
+    }
+
+    public function updateGarnishedAmount(float $amount): void
+    {
+        $this->increment('amount_garnished_to_date', $amount);
+        
+        // If total amount has been garnished, mark as completed
+        if ($this->total_amount_to_garnish > 0 && 
+            $this->amount_garnished_to_date >= $this->total_amount_to_garnish) {
+            $this->update(['status' => 'completed']);
+        }
+    }
+
+    public function getGarnishmentStatusAttribute(): string
+    {
+        if ($this->type !== 'garnishment') {
+            return 'not_garnishment';
+        }
+
+        if ($this->total_amount_to_garnish > 0) {
+            $percentage = ($this->amount_garnished_to_date / $this->total_amount_to_garnish) * 100;
+            if ($percentage >= 100) {
+                return 'completed';
+            }
+            return 'in_progress';
+        }
+
+        return 'ongoing';
+    }
+
+    public function getRemainingGarnishmentAmount(): float
+    {
+        if ($this->total_amount_to_garnish > 0) {
+            return max(0, $this->total_amount_to_garnish - $this->amount_garnished_to_date);
+        }
+        return 0;
     }
 }

@@ -8,6 +8,7 @@ use App\Models\Payroll;
 use App\Models\PayrollItem;
 use App\Models\EmployeePayrollItem;
 use App\Models\CompanyPayrollTemplate;
+use App\Models\EmployeeGarnishment;
 use App\Services\Payroll\StatutoryDeductionCalculator;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -47,13 +48,22 @@ class PayrollCalculationService
             $payrollPeriodStart
         );
 
-        // Calculate totals
+        // Calculate disposable income for garnishments
         $totalAllowances = $companyItems['allowances']->sum('amount') + 
                           $employeeItems['allowances']->sum('amount');
         
-        $totalDeductions = $companyItems['deductions']->sum('amount') + 
-                          $employeeItems['deductions']->sum('amount') +
-                          $statutoryResult['total_employee_deductions'];
+        $totalVoluntaryDeductions = $companyItems['deductions']->sum('amount') + 
+                                   $employeeItems['deductions']->sum('amount');
+        
+        $disposableIncome = $grossSalary + $totalAllowances - $statutoryResult['total_employee_deductions'] - $totalVoluntaryDeductions;
+
+        // Calculate garnishments based on disposable income
+        $garnishmentResult = $this->calculateGarnishments($employee, $disposableIncome, $payrollPeriodStart);
+
+        // Calculate final totals
+        $totalDeductions = $totalVoluntaryDeductions + 
+                          $statutoryResult['total_employee_deductions'] + 
+                          $garnishmentResult['total_garnished'];
 
         $netSalary = $grossSalary + $totalAllowances - $totalDeductions;
 
@@ -66,7 +76,9 @@ class PayrollCalculationService
             'total_allowances' => $totalAllowances,
             'total_deductions' => $totalDeductions,
             'total_statutory_deductions' => $statutoryResult['total_employee_deductions'],
+            'total_garnishments' => $garnishmentResult['total_garnished'],
             'total_employer_contributions' => $statutoryResult['total_employer_contributions'],
+            'disposable_income' => $disposableIncome,
             'net_salary' => $netSalary,
             'payroll_items' => [
                 'allowances' => [
@@ -76,12 +88,39 @@ class PayrollCalculationService
                 'deductions' => [
                     'company' => $companyItems['deductions']->toArray(),
                     'statutory' => $statutoryResult['deductions'],
-                    'employee' => $employeeItems['deductions']->toArray()
+                    'employee' => $employeeItems['deductions']->toArray(),
+                    'garnishments' => $garnishmentResult['garnishments']
                 ]
             ],
             'calculation_date' => now(),
             'errors' => $statutoryResult['errors'] ?? []
         ];
+    }
+
+    /**
+     * Calculate garnishments for an employee
+     */
+    private function calculateGarnishments(Employee $employee, float $disposableIncome, Carbon $date): array
+    {
+        try {
+            return EmployeeGarnishment::calculateTotalGarnishments(
+                $employee->uuid,
+                $disposableIncome,
+                $date
+            );
+        } catch (\Exception $e) {
+            Log::error('Error calculating garnishments for employee: ' . $employee->uuid, [
+                'error' => $e->getMessage(),
+                'disposable_income' => $disposableIncome,
+                'date' => $date->toDateString()
+            ]);
+            
+            return [
+                'total_garnished' => 0,
+                'remaining_disposable_income' => $disposableIncome,
+                'garnishments' => []
+            ];
+        }
     }
 
     /**
