@@ -26,7 +26,6 @@ class CurrenciesSeeder extends Seeder
                 'updated_at' => now(),
             ],
             [
-                            
                 'uuid' => (string) Str::uuid(),
                 'code' => 'ZAR',
                 'name' => 'South African Rand',
@@ -35,7 +34,6 @@ class CurrenciesSeeder extends Seeder
                 'is_active' => true,
                 'created_at' => now(),
                 'updated_at' => now(),
-            
             ],
             [
                 'uuid' => (string) Str::uuid(),
@@ -117,8 +115,34 @@ class CurrenciesSeeder extends Seeder
                 'created_at' => now(),
                 'updated_at' => now(),
             ],
+            [
+                'uuid' => (string) Str::uuid(),
+                'code' => 'GHS',
+                'name' => 'Ghanaian Cedi',
+                'symbol' => 'GH₵',
+                'exchange_rate' => 15.00, // Example rate
+                'is_active' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'uuid' => (string) Str::uuid(),
+                'code' => 'MUR',
+                'name' => 'Mauritian Rupee',
+                'symbol' => '₨',
+                'exchange_rate' => 45.00, // Example rate
+                'is_active' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
 
         ];
+
+        // Store currency UUIDs for later reference
+        $currencyUuids = [];
+        foreach ($currencies as $currency) {
+            $currencyUuids[$currency['code']] = $currency['uuid'];
+        }
 
         DB::table('currencies')->insert($currencies);
     }

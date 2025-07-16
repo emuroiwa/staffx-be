@@ -25,6 +25,11 @@ class CompanyPayrollTemplate extends Model
         'name',
         'description',
         'type',
+        'contribution_type',
+        'has_employee_match',
+        'match_logic',
+        'employee_match_amount',
+        'employee_match_percentage',
         'calculation_method',
         'amount',
         'default_amount',
@@ -43,11 +48,14 @@ class CompanyPayrollTemplate extends Model
         'amount' => 'decimal:2',
         'default_amount' => 'decimal:2',
         'default_percentage' => 'decimal:2', 
+        'employee_match_amount' => 'decimal:2',
+        'employee_match_percentage' => 'decimal:2',
         'minimum_amount' => 'decimal:2',
         'maximum_amount' => 'decimal:2',
         'eligibility_rules' => 'array',
         'is_taxable' => 'boolean',
         'is_pensionable' => 'boolean',
+        'has_employee_match' => 'boolean',
         'is_active' => 'boolean',
         'requires_approval' => 'boolean'
     ];
@@ -105,6 +113,100 @@ class CompanyPayrollTemplate extends Model
         }
 
         return round($result, 2);
+    }
+
+    /**
+     * Calculate employer contribution with optional employee matching
+     */
+    public function calculateEmployerContribution(Employee $employee, float $baseSalary): array
+    {
+        if ($this->type !== 'employer_contribution') {
+            return [
+                'employer_amount' => 0,
+                'employee_amount' => 0,
+                'total_amount' => 0
+            ];
+        }
+
+        // Calculate employer contribution
+        $employerAmount = $this->calculateAmount($employee, $baseSalary);
+        $employeeAmount = 0;
+
+        // Calculate employee matching contribution if applicable
+        if ($this->has_employee_match) {
+            $employeeAmount = $this->calculateEmployeeMatchAmount($employee, $baseSalary, $employerAmount);
+        }
+
+        return [
+            'employer_amount' => $employerAmount,
+            'employee_amount' => $employeeAmount,
+            'total_amount' => $employerAmount + $employeeAmount,
+            'calculation_details' => [
+                'method' => $this->calculation_method,
+                'base_salary' => $baseSalary,
+                'employer_rate' => $this->default_percentage,
+                'employee_rate' => $this->employee_match_percentage,
+                'match_logic' => $this->match_logic,
+                'contribution_type' => $this->contribution_type
+            ]
+        ];
+    }
+
+    /**
+     * Calculate employee matching contribution amount
+     */
+    private function calculateEmployeeMatchAmount(Employee $employee, float $baseSalary, float $employerAmount): float
+    {
+        if (!$this->has_employee_match) {
+            return 0;
+        }
+
+        $result = match($this->match_logic) {
+            'equal' => $employerAmount, // 1:1 matching
+            'percentage' => $this->calculateEmployeePercentageMatch($baseSalary),
+            'custom' => $this->calculateCustomEmployeeMatch($employee, $baseSalary),
+            default => 0
+        };
+
+        // Apply same constraints as employer contribution for consistency
+        if ($this->minimum_amount && $result < (float) $this->minimum_amount) {
+            $result = (float) $this->minimum_amount;
+        }
+        
+        if ($this->maximum_amount && $result > (float) $this->maximum_amount) {
+            $result = (float) $this->maximum_amount;
+        }
+
+        return round($result, 2);
+    }
+
+    /**
+     * Calculate employee percentage-based match
+     */
+    private function calculateEmployeePercentageMatch(float $baseSalary): float
+    {
+        if (!$this->employee_match_percentage) {
+            return 0;
+        }
+
+        return match($this->calculation_method) {
+            'percentage_of_salary' => ($baseSalary * ((float) $this->employee_match_percentage / 100)),
+            'percentage_of_basic' => ($baseSalary * ((float) $this->employee_match_percentage / 100)),
+            default => 0
+        };
+    }
+
+    /**
+     * Calculate custom employee match amount
+     */
+    private function calculateCustomEmployeeMatch(Employee $employee, float $baseSalary): float
+    {
+        return match($this->calculation_method) {
+            'fixed_amount' => (float) ($this->employee_match_amount ?? 0),
+            'percentage_of_salary' => ($baseSalary * ((float) ($this->employee_match_percentage ?? 0) / 100)),
+            'percentage_of_basic' => (($employee->salary ?? 0) * ((float) ($this->employee_match_percentage ?? 0) / 100)),
+            default => 0
+        };
     }
 
     public function isApplicableToEmployee(Employee $employee): bool
@@ -218,15 +320,46 @@ class CompanyPayrollTemplate extends Model
     public function calculateForEmployee(Employee $employee, $date = null): array
     {
         if (!$this->isApplicableToEmployee($employee)) {
-            return ['amount' => 0];
+            return [
+                'amount' => 0,
+                'employer_amount' => 0,
+                'employee_amount' => 0,
+                'total_amount' => 0
+            ];
         }
 
-        $amount = $this->calculateAmount($employee, (float) ($employee->salary ?? 0));
+        $baseSalary = (float) ($employee->salary ?? 0);
+
+        // Handle employer contributions differently
+        if ($this->type === 'employer_contribution') {
+            $contribution = $this->calculateEmployerContribution($employee, $baseSalary);
+            
+            return [
+                'amount' => $contribution['employer_amount'], // For backward compatibility
+                'employer_amount' => $contribution['employer_amount'],
+                'employee_amount' => $contribution['employee_amount'],
+                'total_amount' => $contribution['total_amount'],
+                'calculation_method' => $this->calculation_method,
+                'base_value' => $baseSalary,
+                'calculation_details' => $contribution['calculation_details'],
+                'type' => 'employer_contribution',
+                'contribution_type' => $this->contribution_type,
+                'has_employee_match' => $this->has_employee_match,
+                'match_logic' => $this->match_logic
+            ];
+        }
+
+        // Handle regular allowances and deductions
+        $amount = $this->calculateAmount($employee, $baseSalary);
 
         return [
             'amount' => $amount,
+            'employer_amount' => 0,
+            'employee_amount' => ($this->type === 'deduction') ? $amount : 0,
+            'total_amount' => $amount,
             'calculation_method' => $this->calculation_method,
-            'base_value' => (float) ($employee->salary ?? 0)
+            'base_value' => $baseSalary,
+            'type' => $this->type
         ];
     }
 }

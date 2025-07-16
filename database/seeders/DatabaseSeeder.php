@@ -16,17 +16,17 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // Seed currencies first (reference data)
+        // Seed reference data in proper order
         $this->call([
-            CurrenciesSeeder::class,
-            CountrySeeder::class,
-            Company::class,
-            TaxJurisdictionSeeder::class,
-            StatutoryDeductionTemplateSeeder::class,
-            DefaultDepartmentsSeeder::class,
-            DefaultPositionsSeeder::class,
-            EmployeeSeeder::class,
-            ZimbabweStatutoryDeductionTemplateSeeder::class,
+            CurrenciesSeeder::class,           // 1. Currencies first
+            CountrySeeder::class,              // 2. Countries (links to currencies)
+            CompanySeeder::class,              // 3. Companies (links to countries & currencies)
+            TaxJurisdictionSeeder::class,      // 4. Tax jurisdictions
+            StatutoryDeductionTemplateSeeder::class, // 5. Statutory deductions
+            DefaultDepartmentsSeeder::class,   // 6. Departments
+            DefaultPositionsSeeder::class,     // 7. Positions
+            EmployeeSeeder::class,             // 8. Employees (links to companies)
+            ZimbabweStatutoryDeductionTemplateSeeder::class, // 9. Additional country-specific data
         ]);
 
         // User::factory(10)->create();

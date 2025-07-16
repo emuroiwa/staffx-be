@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
@@ -20,6 +21,7 @@ class Country extends Model
         'iso_code',
         'name',
         'currency_code',
+        'currency_uuid',
         'timezone',
         'regulatory_framework',
         'is_supported_for_payroll',
@@ -55,6 +57,11 @@ class Country extends Model
     public function companies(): HasMany
     {
         return $this->hasMany(Company::class, 'country_uuid', 'uuid');
+    }
+
+    public function currency(): BelongsTo
+    {
+        return $this->belongsTo(Currency::class, 'currency_uuid', 'uuid');
     }
 
     // Business Logic Methods

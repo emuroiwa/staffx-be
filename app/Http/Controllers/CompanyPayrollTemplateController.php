@@ -16,7 +16,7 @@ class CompanyPayrollTemplateController extends Controller
     public function index(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
-            'type' => 'sometimes|in:allowance,deduction',
+            'type' => 'sometimes|in:allowance,deduction,employer_contribution',
             'is_active' => 'sometimes|boolean',
             'per_page' => 'sometimes|integer|min:1|max:100'
         ]);
@@ -80,19 +80,27 @@ class CompanyPayrollTemplateController extends Controller
             'code' => 'required|string|max:50',
             'name' => 'required|string|max:255',
             'description' => 'sometimes|string|max:1000',
-            'type' => 'required|in:allowance,deduction',
+            'type' => 'required|in:allowance,deduction,employer_contribution',
             'calculation_method' => 'required|in:fixed_amount,percentage_of_salary,percentage_of_basic,formula',
             'amount' => 'required_if:calculation_method,fixed_amount|nullable|numeric|min:0',
             'default_percentage' => 'required_if:calculation_method,percentage_of_salary,percentage_of_basic|nullable|numeric|min:0|max:100',
             'formula_expression' => 'required_if:calculation_method,formula|nullable|string',
             'minimum_amount' => 'sometimes|nullable|numeric|min:0',
             'maximum_amount' => 'sometimes|nullable|numeric|min:0|gte:minimum_amount',
+            
+            // Employer contribution specific fields
+            'contribution_type' => 'required_if:type,employer_contribution|nullable|string|in:pension,medical_aid,provident_fund,group_life,disability,training_levy,other',
+            'has_employee_match' => 'sometimes|boolean',
+            'match_logic' => 'required_if:has_employee_match,true|nullable|string|in:equal,percentage,custom',
+            'employee_match_amount' => 'required_if:match_logic,custom|nullable|numeric|min:0',
+            'employee_match_percentage' => 'required_if:match_logic,percentage,custom|nullable|numeric|min:0|max:100',
+            
             'is_taxable' => [
                 'sometimes',
                 'boolean',
                 function ($attribute, $value, $fail) use ($request) {
-                    if ($request->type === 'deduction' && $value === true) {
-                        $fail('Deductions cannot be taxable as they reduce taxable income.');
+                    if (($request->type === 'deduction' || $request->type === 'employer_contribution') && $value === true) {
+                        $fail('Deductions and employer contributions cannot be taxable.');
                     }
                 }
             ],
@@ -100,8 +108,8 @@ class CompanyPayrollTemplateController extends Controller
                 'sometimes',
                 'boolean',
                 function ($attribute, $value, $fail) use ($request) {
-                    if ($request->type === 'deduction' && $value === true) {
-                        $fail('Deductions cannot be pensionable as they reduce pensionable income.');
+                    if (($request->type === 'deduction' || $request->type === 'employer_contribution') && $value === true) {
+                        $fail('Deductions and employer contributions cannot be pensionable.');
                     }
                 }
             ],
@@ -139,8 +147,8 @@ class CompanyPayrollTemplateController extends Controller
             }
 
             // Automatically set taxable/pensionable based on type
-            $isTaxable = $request->type === 'deduction' ? false : $request->get('is_taxable', true);
-            $isPensionable = $request->type === 'deduction' ? false : $request->get('is_pensionable', true);
+            $isTaxable = ($request->type === 'deduction' || $request->type === 'employer_contribution') ? false : $request->get('is_taxable', true);
+            $isPensionable = ($request->type === 'deduction' || $request->type === 'employer_contribution') ? false : $request->get('is_pensionable', true);
 
             $template = CompanyPayrollTemplate::create([
                 'company_uuid' => $company->uuid,
@@ -148,6 +156,11 @@ class CompanyPayrollTemplateController extends Controller
                 'name' => $request->name,
                 'description' => $request->description,
                 'type' => $request->type,
+                'contribution_type' => $request->contribution_type,
+                'has_employee_match' => $request->get('has_employee_match', false),
+                'match_logic' => $request->match_logic,
+                'employee_match_amount' => $request->employee_match_amount,
+                'employee_match_percentage' => $request->employee_match_percentage,
                 'calculation_method' => $request->calculation_method,
                 'amount' => $request->amount,
                 'default_percentage' => $request->default_percentage,
@@ -239,13 +252,21 @@ class CompanyPayrollTemplateController extends Controller
             'formula_expression' => 'sometimes|nullable|string',
             'minimum_amount' => 'sometimes|nullable|numeric|min:0',
             'maximum_amount' => 'sometimes|nullable|numeric|min:0',
+            
+            // Employer contribution specific fields
+            'contribution_type' => 'sometimes|nullable|string|in:pension,medical_aid,provident_fund,group_life,disability,training_levy,other',
+            'has_employee_match' => 'sometimes|boolean',
+            'match_logic' => 'sometimes|nullable|string|in:equal,percentage,custom',
+            'employee_match_amount' => 'sometimes|nullable|numeric|min:0',
+            'employee_match_percentage' => 'sometimes|nullable|numeric|min:0|max:100',
+            
             'is_taxable' => [
                 'sometimes',
                 'boolean',
                 function ($attribute, $value, $fail) use ($request, $template) {
                     $type = $request->type ?? $template->type;
-                    if ($type === 'deduction' && $value === true) {
-                        $fail('Deductions cannot be taxable as they reduce taxable income.');
+                    if (($type === 'deduction' || $type === 'employer_contribution') && $value === true) {
+                        $fail('Deductions and employer contributions cannot be taxable.');
                     }
                 }
             ],
@@ -254,8 +275,8 @@ class CompanyPayrollTemplateController extends Controller
                 'boolean',
                 function ($attribute, $value, $fail) use ($request, $template) {
                     $type = $request->type ?? $template->type;
-                    if ($type === 'deduction' && $value === true) {
-                        $fail('Deductions cannot be pensionable as they reduce pensionable income.');
+                    if (($type === 'deduction' || $type === 'employer_contribution') && $value === true) {
+                        $fail('Deductions and employer contributions cannot be pensionable.');
                     }
                 }
             ],
@@ -276,12 +297,14 @@ class CompanyPayrollTemplateController extends Controller
             $updateData = $request->only([
                 'name', 'description', 'calculation_method', 'amount', 
                 'default_percentage', 'formula_expression', 'minimum_amount',
-                'maximum_amount', 'eligibility_rules', 'requires_approval', 'is_active'
+                'maximum_amount', 'eligibility_rules', 'requires_approval', 'is_active',
+                'contribution_type', 'has_employee_match', 'match_logic',
+                'employee_match_amount', 'employee_match_percentage'
             ]);
 
             // Handle taxable/pensionable based on type
             $currentType = $request->type ?? $template->type;
-            if ($currentType === 'deduction') {
+            if ($currentType === 'deduction' || $currentType === 'employer_contribution') {
                 $updateData['is_taxable'] = false;
                 $updateData['is_pensionable'] = false;
             } else {
@@ -443,6 +466,41 @@ class CompanyPayrollTemplateController extends Controller
             $mockEmployee->exists = false; // Mark as not persisted to avoid save attempts
 
             $grossSalary = $request->get('gross_salary', $request->employee_basic_salary);
+            
+            // Handle employer contributions differently
+            if ($template->type === 'employer_contribution') {
+                $contributionResult = $template->calculateEmployerContribution($mockEmployee, $grossSalary);
+                
+                return response()->json([
+                    'success' => true,
+                    'data' => [
+                        'calculated_amount' => $contributionResult['employer_amount'],
+                        'employer_amount' => $contributionResult['employer_amount'],
+                        'employee_amount' => $contributionResult['employee_amount'],
+                        'total_amount' => $contributionResult['total_amount'],
+                        'employee_basic_salary' => $request->employee_basic_salary,
+                        'gross_salary_used' => $grossSalary,
+                        'calculation_method' => $template->calculation_method,
+                        'calculation_details' => $contributionResult['calculation_details'],
+                        'template_settings' => [
+                            'type' => $template->type,
+                            'contribution_type' => $template->contribution_type,
+                            'has_employee_match' => $template->has_employee_match,
+                            'match_logic' => $template->match_logic,
+                            'amount' => $template->amount,
+                            'default_percentage' => $template->default_percentage,
+                            'employee_match_amount' => $template->employee_match_amount,
+                            'employee_match_percentage' => $template->employee_match_percentage,
+                            'formula_expression' => $template->formula_expression,
+                            'minimum_amount' => $template->minimum_amount,
+                            'maximum_amount' => $template->maximum_amount
+                        ]
+                    ],
+                    'message' => 'Employer contribution calculation test completed successfully'
+                ]);
+            }
+            
+            // Regular calculation for allowances and deductions
             $calculatedAmount = $template->calculateAmount($mockEmployee, $grossSalary);
 
             return response()->json([
